@@ -56,7 +56,7 @@ public class EngineRoundTripTests
         Assert.Equal(manifest2.FileCount, restoreLatest.Files);
         EngineHarness.AssertIdentical(manifest2, latest);
 
-        var pointInTime = h.Workspace.RestoreTarget("point-in-time");
+        var pointInTime = Path.Combine(h.Workspace.RestoreTarget("point-in-time"), "2026-10-15", "documents");
         Assert.Equal(RunState.Succeeded, (await h.RestoreAsync(snapshots[1], pointInTime)).State);
         EngineHarness.AssertIdentical(manifest1, pointInTime);
 
@@ -78,7 +78,7 @@ public class EngineRoundTripTests
         Assert.Equal(RunState.Succeeded, (await h.RestoreAsync(snapshot, folder, "nested")).State);
         EngineHarness.AssertIdentical(TreeManifest.Capture(Path.Combine(h.Workspace.Source, "nested")), folder);
 
-        var file = h.Workspace.RestoreTarget("one-file");
+        var file = Path.Combine(h.Workspace.RestoreTarget("parents-not-created-yet"), "one-file");
         Assert.Equal(RunState.Succeeded, (await h.RestoreAsync(snapshot, file, TreeFixture.DeepFile)).State);
         Assert.Equal(
             await File.ReadAllBytesAsync(Path.Combine(h.Workspace.Source, TreeFixture.DeepFile), Ct),

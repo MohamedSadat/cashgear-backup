@@ -27,7 +27,7 @@ public class KopiaApiContractTests(ContractServerFixture fx) : IClassFixture<Con
     {
         var (status, body) = await Client.SendRawAsync(KopiaUser.Ui, HttpMethod.Get, "/", null, includeCsrf: false, Ct);
         Assert.Equal(200, status);
-        Assert.Contains("<title>CashGear</title>", body, StringComparison.Ordinal);
+        Assert.Matches("<title>CashGear[^<]*</title>", body); // Kopia appends its version to our title
         Assert.Matches("<meta name=\"kopia-csrf-token\" content=\"[0-9a-f]{32,}\"", body);
     }
 
