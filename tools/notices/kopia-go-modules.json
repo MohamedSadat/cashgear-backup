@@ -1,0 +1,1190 @@
+{
+  "schemaVersion": 1,
+  "kopiaVersion": "0.23.1",
+  "kopiaExeSha256": "96c0946314b50dcc7c5ae9d3ec7e3763e742fcebf7d5cbebdaac3ceee5fb3bd7",
+  "go": {
+    "version": "go1.25.11",
+    "license": "BSD-3-Clause",
+    "copyright": ["Copyright 2009 The Go Authors."],
+    "files": [
+      { "path": "LICENSE", "license": "BSD-3-Clause" }
+    ]
+  },
+  "modules": [
+    {
+      "path": "cel.dev/expr",
+      "version": "v0.25.1",
+      "sum": "h1:1KrZg61W6TWSxuNZ37Xy49ps13NUovb66QLprthtwi4=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go",
+      "version": "v0.123.0",
+      "sum": "h1:2NAUJwPR47q+E35uaJeYoNhuNEM9kM8SjgRgdeOJUSE=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/auth",
+      "version": "v0.20.0",
+      "sum": "h1:kXTssoVb4azsVDoUiF8KvxAqrsQcQtB53DcSgta74CA=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/auth/oauth2adapt",
+      "version": "v0.2.8",
+      "sum": "h1:keo8NaayQZ6wimpNSmW5OPc283g65QNIiLpZnkHRbnc=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata",
+      "version": "v0.9.0",
+      "sum": "h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdBtwLoEkH9Zs=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/iam",
+      "version": "v1.7.0",
+      "sum": "h1:JD3zh0C6LHl16aCn5Akff0+GELdp1+4hmh6ndoFLl8U=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/monitoring",
+      "version": "v1.24.3",
+      "sum": "h1:dde+gMNc0UhPZD1Azu6at2e79bfdztVDS5lvhOdsgaE=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "cloud.google.com/go/storage",
+      "version": "v1.62.3",
+      "sum": "h1:SZq1t23NCI+e96dH77Dg3PEfsNNEjqO8zE5AnD8gVD0=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/Azure/azure-sdk-for-go/sdk/azcore",
+      "version": "v1.22.0",
+      "sum": "h1:aokoqcHvaGjiM3VpjKDfMMnF/8epJ+Q1HLJ7CudztqE=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Microsoft Corporation."],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/Azure/azure-sdk-for-go/sdk/azidentity",
+      "version": "v1.13.1",
+      "sum": "h1:Hk5QBxZQC1jb2Fwj6mpzme37xbCDdNTxU7O9eb5+LB4=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Microsoft Corporation."],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/Azure/azure-sdk-for-go/sdk/internal",
+      "version": "v1.12.0",
+      "sum": "h1:fhqpLE3UEXi9lPaBRpQ6XuRW0nU7hgg4zlmZZa+a9q4=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Microsoft Corporation."],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob",
+      "version": "v1.7.0",
+      "sum": "h1:BM85pSYlVYQHdq00nxyPoOkyLF5NArJG3bOsrmbwr4k=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Microsoft Corporation. All rights reserved."],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/AzureAD/microsoft-authentication-library-for-go",
+      "version": "v1.7.2",
+      "sum": "h1:RHK7bS+HQMslb1sZpAokUt+zTVmue0hKSs2C791hhzU=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Microsoft Corporation."],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/GehirnInc/crypt",
+      "version": "v0.0.0-20230320061759-8cc1b52080c5",
+      "sum": "h1:IEjq88XO4PuBDcvmjQJcQGg+w+UaafSy8G5Kcb5tBhI=",
+      "license": "BSD-2-Clause",
+      "copyright": ["Copyright (c) 2012, Jeramey Crawford <jeramey@antihe.ro>"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-2-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp",
+      "version": "v1.31.0",
+      "sum": "h1:DHa2U07rk8syqvCge0QIGMCE1WxGj9njT44GH7zNJLQ=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric",
+      "version": "v0.55.0",
+      "sum": "h1:UnDZ/zFfG1JhH/DqxIZYU/1CUAlTUScoXD/LcM2Ykk8=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping",
+      "version": "v0.55.0",
+      "sum": "h1:0s6TxfCu2KHkkZPnBfsQ2y5qia0jl3MMrmBhu3nCOYk=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/alecthomas/kingpin/v2",
+      "version": "v2.4.0",
+      "sum": "h1:f48lwail6p8zpO1bC4TxtqACaGqHYA22qkHjHpqDjYY=",
+      "license": "MIT",
+      "copyright": ["Copyright (C) 2014 Alec Thomas"],
+      "files": [
+        { "path": "COPYING", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/alecthomas/units",
+      "version": "v0.0.0-20240927000941-0f3dac36c52b",
+      "sum": "h1:mimo19zliBX/vSQ6PWWSL9lK8qwHozUj03+zLoEB8O0=",
+      "license": "MIT",
+      "copyright": ["Copyright (C) 2014 Alec Thomas"],
+      "files": [
+        { "path": "COPYING", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/beorn7/perks",
+      "version": "v1.0.1",
+      "sum": "h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=",
+      "license": "MIT",
+      "copyright": ["Copyright (C) 2013 Blake Mizerany"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/cenkalti/backoff/v5",
+      "version": "v5.0.3",
+      "sum": "h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2014 Cenk Altı"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/cespare/xxhash/v2",
+      "version": "v2.3.0",
+      "sum": "h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016 Caleb Spare"],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/chmduquesne/rollinghash",
+      "version": "v4.0.0+incompatible",
+      "sum": "h1:hnREQO+DXjqIw3rUTzWN7/+Dpw+N5Um8zpKV0JOEgbo=",
+      "license": "MIT",
+      "copyright": ["Copyright 2015 Christophe-Marie Duquesne"],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/cncf/xds/go",
+      "version": "v0.0.0-20260202195803-dba9d589def2",
+      "sum": "h1:aBangftG7EVZoUb69Os8IaYg++6uMOdKK83QtkkvJik=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/coreos/go-systemd/v22",
+      "version": "v22.7.0",
+      "sum": "h1:LAEzFkke61DFROc7zNLX/WA2i5J8gYqe0rSj9KI28KA=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright 2018 CoreOS, Inc"],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0" },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/danieljoos/wincred",
+      "version": "v1.2.3",
+      "sum": "h1:v7dZC2x32Ut3nEfRH+vhoZGvN72+dQ/snVXo/vMFLdQ=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2014 Daniel Joos"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/dustin/go-humanize",
+      "version": "v1.0.1",
+      "sum": "h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2005-2008 Dustin Sallings <dustin@spy.net>"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/edsrzf/mmap-go",
+      "version": "v1.2.0",
+      "sum": "h1:hXLYlkbaPzt1SaQk+anYwKSRNhufIDCchSPkUD6dD84=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2011, Evan Shaw <edsrzf@gmail.com>"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy",
+      "version": "v1.37.0",
+      "sum": "h1:u3riX6BoYRfF4Dr7dwSOroNfdSbEPe9Yyl09/B6wBrQ=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate",
+      "version": "v1.3.3",
+      "sum": "h1:MVQghNeW+LZcmXe7SY1V36Z+WFMDjpqGAGacLe2T0ds=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/fatih/color",
+      "version": "v1.19.0",
+      "sum": "h1:Zp3PiM21/9Ld6FzSKyL5c/BULoe/ONr9KlbYVOfG8+w=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2013 Fatih Arslan"],
+      "files": [
+        { "path": "LICENSE.md", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/felixge/httpsnoop",
+      "version": "v1.0.4",
+      "sum": "h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016 Felix Geisendörfer (felix@debuggable.com)"],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/foomo/htpasswd",
+      "version": "v0.0.0-20200116085101-e3a90e78da9c",
+      "sum": "h1:DBGU7zCwrrPPDsD6+gqKG8UfMxenWg9BOJE/Nmfph+4=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016 Jan Halfar"],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4",
+      "version": "v4.1.4",
+      "sum": "h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=",
+      "license": "BSD-3-Clause AND Apache-2.0",
+      "copyright": ["Copyright (c) 2012 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "json/LICENSE", "license": "BSD-3-Clause" },
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/go-logr/logr",
+      "version": "v1.4.3",
+      "sum": "h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/go-logr/stdr",
+      "version": "v1.2.2",
+      "sum": "h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/go-ole/go-ole",
+      "version": "v1.3.0",
+      "sum": "h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=",
+      "license": "MIT",
+      "copyright": ["Copyright © 2013-2017 Yasuhiro Matsumoto, <mattn.jp@gmail.com>"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/gofrs/flock",
+      "version": "v0.13.0",
+      "sum": "h1:95JolYOvGMqeH31+FC7D2+uULf6mG61mEZ/A8dRYMzw=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2018-2025, The Gofrs", "Copyright (c) 2015-2020, Tim Heckman"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/golang-jwt/jwt/v5",
+      "version": "v5.3.1",
+      "sum": "h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2012 Dave Grijalva", "Copyright (c) 2021 golang-jwt maintainers"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/golang/glog",
+      "version": "v1.2.5",
+      "sum": "h1:DrW6hGnjIhtvhOIiAKT6Psh/Kd/ldepEa81DKeiRJ5I=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0" }
+      ]
+    },
+    {
+      "path": "github.com/google/readahead",
+      "version": "v0.0.0-20161222183148-eaceba169032",
+      "sum": "h1:6Be3nkuJFyRfCgr6qTIzmRp8y9QwDIbqy/nYr9WDPos=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/google/s2a-go",
+      "version": "v0.1.9",
+      "sum": "h1:LGD7gtMgezd8a/Xak7mEWL0PjoTQFvpRudN895yqKW0=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE.md", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "sum": "h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2009,2014 Google Inc. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/googleapis/enterprise-certificate-proxy",
+      "version": "v0.3.16",
+      "sum": "h1:F/VPrx0YPBdksZJQdCAp0WUsqnNmZpUZszzfYt0M5Dw=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/googleapis/gax-go/v2",
+      "version": "v2.22.0",
+      "sum": "h1:PjIWBpgGIVKGoCXuiCoP64altEJCj3/Ei+kSU5vlZD4=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2016, Google Inc."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/gorilla/mux",
+      "version": "v1.8.1",
+      "sum": "h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2023 The Gorilla Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/grpc-ecosystem/grpc-gateway/v2",
+      "version": "v2.29.0",
+      "sum": "h1:5VipnvEpbqr2gA2VbM+nYVbkIF28c5ZQfqCBQ5g2xfk=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2015, Gengo, Inc."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/hashicorp/cronexpr",
+      "version": "v1.1.3",
+      "sum": "h1:rl5IkxXN2m681EfivTlccqIryzYJSXRGRNa0xeG7NA4=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/klauspost/compress",
+      "version": "v1.18.6",
+      "sum": "h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXDjuao=",
+      "license": "BSD-3-Clause AND Apache-2.0 AND MIT",
+      "copyright": ["Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.", "Copyright (c) 2012 The Go Authors. All rights reserved.", "Copyright (c) 2019 Klaus Post. All rights reserved.", "Copyright 2016-2017 The New York Times Company", "Copyright (c) 2015 Klaus Post", "Copyright 2016 The filepathx Authors", "Copyright (c) 2016 Caleb Spare"],
+      "files": [
+        { "path": "internal/snapref/LICENSE", "license": "BSD-3-Clause" },
+        { "path": "LICENSE", "license": "BSD-3-Clause AND Apache-2.0 AND MIT" },
+        { "path": "s2/LICENSE", "license": "BSD-3-Clause" },
+        { "path": "zstd/internal/xxhash/LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/klauspost/cpuid/v2",
+      "version": "v2.3.0",
+      "sum": "h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 Klaus Post"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/klauspost/crc32",
+      "version": "v1.3.0",
+      "sum": "h1:sSmTt3gUt81RP655XGZPElI0PelVTZ6YwCRnPSupoFM=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2012 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/klauspost/pgzip",
+      "version": "v1.2.6",
+      "sum": "h1:8RXeL5crjEUFnR2/Sn6GJNWtSQ3Dk8pq4CL3jvdDyjU=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2014 Klaus Post"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/klauspost/reedsolomon",
+      "version": "v1.14.0",
+      "sum": "h1:5YSZeclzSYg5nl349+GDG/agDtQ6MZiwUYXvVKN1Jx0=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 Klaus Post", "Copyright (c) 2015 Backblaze"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/kopia/htmluibuild",
+      "version": "v0.0.1-0.20260608231842-7bf9fcc0831d",
+      "sum": "h1:2nHZuoDenhCDeIdDnQXLaaMziiHfIjf+INorIIUVNk8=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/kr/fs",
+      "version": "v0.1.0",
+      "sum": "h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2012 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/kylelemons/godebug",
+      "version": "v1.1.0",
+      "sum": "h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/mattn/go-colorable",
+      "version": "v0.1.15",
+      "sum": "h1:+u9SLTRGnXv73cEsnsmoZBom+dMU88B2M0aDcWy0/jY=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016 Yasuhiro Matsumoto"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/mattn/go-isatty",
+      "version": "v0.0.21",
+      "sum": "h1:xYae+lCNBP7QuW4PUnNG61ffM4hVIfm+zUzDuSzYLGs=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) Yasuhiro MATSUMOTO <mattn.jp@gmail.com>"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/minio/crc64nvme",
+      "version": "v1.1.1",
+      "sum": "h1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/minio/md5-simd",
+      "version": "v1.1.2",
+      "sum": "h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright (c) 2009 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "LICENSE.Golang", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/minio/minio-go/v7",
+      "version": "v7.2.0",
+      "sum": "h1:RCJM0R1XOsRs+A3x3UCaf3ZYbByDaLjFeAi+YCQEPhs=",
+      "license": "Apache-2.0",
+      "copyright": ["MinIO Cloud Storage, (C) 2014-2020 MinIO, Inc."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/munnerz/goautoneg",
+      "version": "v0.0.0-20191010083416-a7dc8b61c822",
+      "sum": "h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2011, Open Knowledge Foundation Ltd."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/mxk/go-vss",
+      "version": "v1.2.1",
+      "sum": "h1:shspH0qgqZ9l5sfIRsXS5BgZXz25/BY+ZQsW0HlD0fM=",
+      "license": "MPL-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "MPL-2.0" }
+      ]
+    },
+    {
+      "path": "github.com/natefinch/atomic",
+      "version": "v1.0.1",
+      "sum": "h1:ZPYKxkqQOx3KZ+RsbnP/YsgvxWQPGxjC0oBt2AhwV0A=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 Nate Finch"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/petar/GoLLRB",
+      "version": "v0.0.0-20210522233825-ae3b015fd3e9",
+      "sum": "h1:1/WtZae0yGtPq+TI6+Tv1WTxkukpXeMlviSxvL7SRgk=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2010, Petar Maymounkov"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/philhofer/fwd",
+      "version": "v1.2.0",
+      "sum": "h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2014-2015, Philip Hofer"],
+      "files": [
+        { "path": "LICENSE.md", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/pkg/browser",
+      "version": "v0.0.0-20240102092130-5ac0b6a4141c",
+      "sum": "h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=",
+      "license": "BSD-2-Clause",
+      "copyright": ["Copyright (c) 2014, Dave Cheney <dave@cheney.net>"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-2-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/pkg/errors",
+      "version": "v0.9.1",
+      "sum": "h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=",
+      "license": "BSD-2-Clause",
+      "copyright": ["Copyright (c) 2015, Dave Cheney <dave@cheney.net>"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-2-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/pkg/sftp",
+      "version": "v1.13.10",
+      "sum": "h1:+5FbKNTe5Z9aspU88DPIKJ9z2KZoaGCu6Sr6kKR/5mU=",
+      "license": "BSD-2-Clause",
+      "copyright": ["Copyright (c) 2013, Dave Cheney"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-2-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/pquerna/ffjson",
+      "version": "v0.0.0-20190930134022-aa0246cd15f7",
+      "sum": "h1:xoIK0ctDddBMnc74udxJYBqlo9Ylnsp1waqjLsnef20=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright (c) 2014, Paul Querna", "part of Go, Copyright (c) 2012 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/prometheus/client_golang",
+      "version": "v1.23.2",
+      "sum": "h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=",
+      "license": "BSD-3-Clause AND Apache-2.0",
+      "copyright": ["Copyright (c) 2013 The Go Authors. All rights reserved.", "Copyright 2012-2015 The Prometheus Authors", "Copyright 2013-2015 Blake Mizerany, Björn Rabenstein", "Copyright 2010 The Go Authors"],
+      "files": [
+        { "path": "internal/github.com/golang/gddo/LICENSE", "license": "BSD-3-Clause" },
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/prometheus/client_model",
+      "version": "v0.6.2",
+      "sum": "h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright 2012-2015 The Prometheus Authors"],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/prometheus/common",
+      "version": "v0.68.1",
+      "sum": "h1:omjRRl4QP4komogpXuhfeOiisQg7xdy8VM1UY+pStaY=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright 2015 The Prometheus Authors"],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "github.com/rs/xid",
+      "version": "v1.6.0",
+      "sum": "h1:fV591PaemRlL6JfRxGDEPl69wICngIQ3shQtzfy2gxU=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 Olivier Poitrey <rs@dailymotion.com>"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/skratchdot/open-golang",
+      "version": "v0.0.0-20200116055534-eef842397966",
+      "sum": "h1:JIAuq3EEf9cgbU6AtGPK4CTG3Zf6CKMNqf0MHTggAUA=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2013 skratchdot"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2",
+      "version": "v2.6.0",
+      "sum": "h1:l+DolpxNWYgruGQVV0xsfeya3CsC7m8iBzDnMpsbLuo=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "github.com/studio-b12/gowebdav",
+      "version": "v0.12.0",
+      "sum": "h1:kFRtQECt8jmVAvA6RHBz3geXUGJHUZA6/IKpOVUs5kM=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2014, Studio B12 GmbH"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/tg123/go-htpasswd",
+      "version": "v1.2.4",
+      "sum": "h1:HgH8KKCjdmo7jjXWN9k1nefPBd7Be3tFCTjc2jPraPU=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 tgic"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/tinylib/msgp",
+      "version": "v1.6.1",
+      "sum": "h1:ESRv8eL3u+DNHUoSAAQRE50Hm162zqAnBoGv9PzScPY=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2014 Philip Hofer", "Portions Copyright (c) 2009 The Go Authors (license at http://golang.org) where indicated"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/xhit/go-str2duration/v2",
+      "version": "v2.1.0",
+      "sum": "h1:lxklc02Drh6ynqX+DdPyp5pCKLUQpRT8bp8Ydu2Bstc=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2009 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "github.com/zalando/go-keyring",
+      "version": "v0.2.8",
+      "sum": "h1:6sD/Ucpl7jNq10rM2pgqTs0sZ9V3qMrqfIIy5YPccHs=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016 Zalando SE"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "github.com/zeebo/blake3",
+      "version": "v0.2.4",
+      "sum": "h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=",
+      "license": "CC0-1.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "CC0-1.0" }
+      ]
+    },
+    {
+      "path": "github.com/zeebo/xxh3",
+      "version": "v1.1.0",
+      "sum": "h1:s7DLGDK45Dyfg7++yxI0khrfwq9661w9EN78eP/UZVs=",
+      "license": "BSD-2-Clause",
+      "copyright": ["Copyright (c) 2012-2014, Yann Collet", "Copyright (c) 2019, Jeff Wendling"],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-2-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk",
+      "version": "v1.2.1",
+      "sum": "h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp",
+      "version": "v1.42.0",
+      "sum": "h1:kpt2PEJuOuqYkPcktfJqWWDjTEd/FNgrxcniL7kQrXQ=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc",
+      "version": "v0.67.0",
+      "sum": "h1:yI1/OhfEPy7J9eoa6Sj051C7n5dvpj0QX8g4sRchg04=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "version": "v0.67.0",
+      "sum": "h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel",
+      "version": "v1.44.0",
+      "sum": "h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "version": "v1.44.0",
+      "sum": "h1:4YsVu3B8+3qtWYYrsUYgn0OG78pN0rnNPRGX4SbokQI=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "version": "v1.44.0",
+      "sum": "h1:qazEJlUOQzhCpzQpFETGby7EdqjI1wsd0W+6Gg1SCTU=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric",
+      "version": "v1.44.0",
+      "sum": "h1:1w0gILTcHdr3YI+ixLyjemwrVnsMURbTZFrSYCdDdmc=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk",
+      "version": "v1.44.0",
+      "sum": "h1:nHYwb9lK+fJPU/dnT6s7W7Z8itMWyqrnVfbheVYrZ58=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric",
+      "version": "v1.44.0",
+      "sum": "h1:3LlKgI+VjbVsjNRFZJZAJ30WjXC5VkNRks6si09iEfI=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace",
+      "version": "v1.44.0",
+      "sum": "h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0 AND BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "go.opentelemetry.io/proto/otlp",
+      "version": "v1.10.0",
+      "sum": "h1:IQRWgT5srOCYfiWnpqUYz9CVmbO8bFmKcwYxpuCSL2g=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "go.uber.org/multierr",
+      "version": "v1.11.0",
+      "sum": "h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2017-2021 Uber Technologies, Inc."],
+      "files": [
+        { "path": "LICENSE.txt", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "go.uber.org/zap",
+      "version": "v1.28.0",
+      "sum": "h1:IZzaP1Fv73/T/pBMLk4VutPl36uNC+OSUh3JLG3FIjo=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2016-2024 Uber Technologies, Inc."],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    },
+    {
+      "path": "go.yaml.in/yaml/v3",
+      "version": "v3.0.4",
+      "sum": "h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=",
+      "license": "MIT AND Apache-2.0",
+      "copyright": ["Copyright (c) 2006-2010 Kirill Simonov", "Copyright (c) 2006-2011 Kirill Simonov", "Copyright (c) 2011-2019 Canonical Ltd", "Copyright 2011-2016 Canonical Ltd."],
+      "files": [
+        { "path": "LICENSE", "license": "MIT AND Apache-2.0" },
+        { "path": "NOTICE", "notice": true }
+      ]
+    },
+    {
+      "path": "golang.org/x/crypto",
+      "version": "v0.52.0",
+      "sum": "h1:RMs7fP2rXdep0CftQlK8Uf+kibLm7qkCcradZWYz988=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/exp",
+      "version": "v0.0.0-20260410095643-746e56fc9e2f",
+      "sum": "h1:W3F4c+6OLc6H2lb//N1q4WpJkhzJCK5J6kUi1NTVXfM=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/mod",
+      "version": "v0.36.0",
+      "sum": "h1:JJjpVx6myfUsUdAzZuOSTTmRE0PfZeNWzzvKrP7amb4=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/net",
+      "version": "v0.55.0",
+      "sum": "h1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/oauth2",
+      "version": "v0.36.0",
+      "sum": "h1:peZ/1z27fi9hUOFCAZaHyrpWG5lwe0RJEEEeH0ThlIs=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/sync",
+      "version": "v0.21.0",
+      "sum": "h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/sys",
+      "version": "v0.46.0",
+      "sum": "h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/term",
+      "version": "v0.43.0",
+      "sum": "h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/text",
+      "version": "v0.37.0",
+      "sum": "h1:Cqjiwd9eSg8e0QAkyCaQTNHFIIzWtidPahFWR83rTrc=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "golang.org/x/time",
+      "version": "v0.15.0",
+      "sum": "h1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright 2009 The Go Authors."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "google.golang.org/api",
+      "version": "v0.283.0",
+      "sum": "h1:0lkp8u0MPwJVHqRL+nJlMAoZVVzbmiXmFHXMOTmSPik=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2013 Joshua Tacoma. All rights reserved.", "Copyright (c) 2011 Google Inc. All rights reserved."],
+      "files": [
+        { "path": "internal/third_party/uritemplates/LICENSE", "license": "BSD-3-Clause" },
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "google.golang.org/genproto",
+      "version": "v0.0.0-20260319201613-d00831a3d3e7",
+      "sum": "h1:XzmzkmB14QhVhgnawEVsOn6OFsnpyxNPRY9QV01dNB0=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api",
+      "version": "v0.0.0-20260526163538-3dc84a4a5aaa",
+      "sum": "h1:Kjn0N0tCrDgiAFW+lGO4JZ3ck44CehvJQMAwj9QF0G8=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc",
+      "version": "v0.0.0-20260526163538-3dc84a4a5aaa",
+      "sum": "h1:mZHHdPZl0dbGHCflZgAq/Q468DWVFcU2whhB2KAo8fk=",
+      "license": "Apache-2.0",
+      "copyright": [],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true }
+      ]
+    },
+    {
+      "path": "google.golang.org/grpc",
+      "version": "v1.81.1",
+      "sum": "h1:VnnIIZ88UzOOKLukQi+ImGz8O1Wdp8nAGGnvOfEIWQQ=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright 2014 gRPC authors."],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0", "standardApache": true },
+        { "path": "NOTICE.txt", "notice": true }
+      ]
+    },
+    {
+      "path": "google.golang.org/protobuf",
+      "version": "v1.36.11",
+      "sum": "h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=",
+      "license": "BSD-3-Clause",
+      "copyright": ["Copyright (c) 2018 The Go Authors. All rights reserved."],
+      "files": [
+        { "path": "LICENSE", "license": "BSD-3-Clause" }
+      ]
+    },
+    {
+      "path": "gopkg.in/ini.v1",
+      "version": "v1.67.2",
+      "sum": "h1:JtOSMb9OuaCZKr7h5D/h6iii14sK0hLbplTc6frx4Ss=",
+      "license": "Apache-2.0",
+      "copyright": ["Copyright 2014 Unknwon"],
+      "files": [
+        { "path": "LICENSE", "license": "Apache-2.0" }
+      ]
+    },
+    {
+      "path": "gopkg.in/kothar/go-backblaze.v0",
+      "version": "v0.0.0-20210124194846-35409b867216",
+      "sum": "h1:2TSTkQ8PMvGOD5eeqqRVv6Z9+BYI+bowK97RCr3W+9M=",
+      "license": "MIT",
+      "copyright": ["Copyright (c) 2015 pH14"],
+      "files": [
+        { "path": "LICENSE", "license": "MIT" }
+      ]
+    }
+  ]
+}
