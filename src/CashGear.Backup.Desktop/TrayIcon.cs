@@ -23,6 +23,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly TaskbarIcon _icon;
     private readonly MenuItem _backUpNow;
     private readonly CancellationTokenSource _cts = new();
+    private readonly HashSet<string> _notifiedAlerts = new(StringComparer.Ordinal);
     private IReadOnlyList<Job>? _jobs;
     private OverviewLevel? _shownLevel;
 
@@ -86,11 +87,13 @@ internal sealed class TrayIcon : IDisposable
         }
 
         IReadOnlyList<Job>? jobs = null;
+        IReadOnlyList<Alert> alerts = [];
         if (_monitor.IsReady)
         {
             try
             {
                 jobs = await _agent.ListJobsAsync(_cts.Token);
+                alerts = await _agent.ListAlertsAsync(_cts.Token);
             }
             catch (AgentCallException)
             {
@@ -103,7 +106,8 @@ internal sealed class TrayIcon : IDisposable
         }
 
         _jobs = jobs;
-        var overview = BackupOverview.Summarize(_monitor.Connection, jobs);
+        NotifyNewAlerts(alerts);
+        var overview = BackupOverview.Summarize(_monitor.Connection, jobs, alerts);
         _icon.ToolTipText = $"CashGear Backup: {overview.Text}";
         if (_shownLevel != overview.Level)
         {
@@ -112,6 +116,22 @@ internal sealed class TrayIcon : IDisposable
         }
 
         _backUpNow.IsEnabled = _monitor.IsReady && jobs is { Count: > 0 };
+    }
+
+    /// <summary>A Windows notification for alerts not shown since the app started (so once per sign-in at most).</summary>
+    private void NotifyNewAlerts(IReadOnlyList<Alert> alerts)
+    {
+        var fresh = alerts.Where(a => _notifiedAlerts.Add(a.Id)).OrderBy(a => Alerts.Rank(a.Kind)).ToList();
+        if (fresh.Count == 0)
+        {
+            return;
+        }
+
+        var first = fresh[0];
+        var message = fresh.Count == 1
+            ? $"{first.JobName}: {first.Message}"
+            : $"{fresh.Count} problems need your attention. {first.JobName}: {first.Message}";
+        _icon.ShowNotification("CashGear Backup", message, fresh.Any(a => Alerts.IsProblem(a.Kind)) ? NotificationIcon.Error : NotificationIcon.Warning);
     }
 
     /// <summary>Starts every enabled job that is not already running.</summary>

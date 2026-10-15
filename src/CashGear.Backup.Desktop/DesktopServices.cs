@@ -65,4 +65,30 @@ internal sealed class DesktopShell : IDesktopShell
         start.ArgumentList.Add(path);
         Process.Start(start)?.Dispose();
     }
+
+    public async Task<string?> SaveFileAsync(string suggestedName, byte[] content, CancellationToken ct)
+    {
+        var extension = Path.GetExtension(suggestedName);
+        var path = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dialog = new SaveFileDialog
+            {
+                FileName = suggestedName,
+                DefaultExt = extension,
+                AddExtension = true,
+                OverwritePrompt = true,
+                Filter = extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ? "PDF document (*.pdf)|*.pdf" : $"*{extension}|*{extension}",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+            var owner = Application.Current.Windows.OfType<MainWindow>().FirstOrDefault(w => w.IsVisible);
+            return (owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner)) == true ? dialog.FileName : null;
+        }, System.Windows.Threading.DispatcherPriority.Normal, ct).Task;
+        if (path is null)
+        {
+            return null;
+        }
+
+        await File.WriteAllBytesAsync(path, content, ct);
+        return path;
+    }
 }
