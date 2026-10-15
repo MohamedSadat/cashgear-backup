@@ -139,13 +139,18 @@ internal sealed class EngineHarness : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var engine in _engines)
+        try
         {
-            await engine.DisposeAsync();
+            foreach (var engine in _engines)
+            {
+                await engine.DisposeAsync();
+            }
         }
-
-        Password.Dispose();
-        Log.Dispose();
-        Workspace.Dispose();
+        finally
+        {
+            Password.Dispose();
+            Log.Dispose();
+            Workspace.Dispose();
+        }
     }
 }
