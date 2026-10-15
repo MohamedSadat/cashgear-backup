@@ -56,6 +56,21 @@ over a local named pipe.
 - Logs: `<data>\logs\agent-<date>.log` (14 days, 20 MB per file), plus the Event Log (source "CashGear
   Backup", warnings and up) when running as a service.
 
+## Phase 3: checks, alerts, email, restore to the original folder
+
+| Piece | Where | What it does |
+|---|---|---|
+| Checks | `Runs/RunCoordinator.StartVerifyAsync` | A run of kind Verify through `IBackupEngine.VerifyAsync` (structure of every snapshot plus a sampled read-back); one per job at a time; cannot be canceled |
+| Housekeeping | `Notifications/Housekeeping.cs` | Every 5 minutes once ready: start checks that are due (a job with a restore point whose last check, or creation, is older than `verify_every_days`), then email alerts not emailed before |
+| Alerts | `Notifications/AlertService.cs` | Worked out from state.db on each call, per enabled job: latest check failed, latest backup failed, latest backup skipped files, no restore point for `alert_after_days`. Ids are stable while the condition lasts, so each one is emailed once |
+| Settings | `Notifications/SettingsStore.cs` | One JSON row in state.db's settings table; the email password inside it as a DPAPI blob; never returned by `GetSettings` |
+| Email | `Notifications/EmailSender.cs` | MailKit; STARTTLS is required (not opportunistic) when chosen; no protocol log; credentials over unencrypted SMTP are refused |
+| Restore to the original folder | `Runs/RunCoordinator.StartRestoreToOriginalAsync`, `Runs/KeepBothMerge.cs` | Engine restore into a hidden `.cashgear-restore-<run>` folder inside the job's folder, then a merge that never replaces anything; the job counts as busy meanwhile (no backup starts) |
+| Search | `Runs/SnapshotSearch.cs` | Breadth-first walk of a snapshot through `BrowseAsync`, streamed; stops at the result limit or 20,000 folders |
+
+Access levels: `SearchSnapshot`, `ListAlerts` and `GetSettings` are Read; `VerifyJobNow` is Operate; `UpdateSettings`
+and `SendTestEmail` are Manage (`SendTestEmail` makes the LocalSystem agent connect to a server the caller names).
+
 ## Findings while building it
 
 | # | Observed (.NET 10) | Consequence |
@@ -76,11 +91,21 @@ over a local named pipe.
    applied by the installer in Phase 4). `CurrentUser` scope under LocalSystem would bind blobs to the SYSTEM
    account instead; it breaks if the service account ever changes.
 4. **Minimum password length 8** for new repositories (there is no recovery for a lost password; the Recovery
-   Kit is Phase 3).
+   Kit, Phase 3, is the backstop).
 5. **Failed-run semantics:** a scheduled backup with its destination unplugged is a Failed run, not
-   skipped or retried later; "run when the NAS is reachable" (plan) needs a retry policy in Phase 2 or 3.
+   skipped or retried later. Phase 3's alerts report it (backup failed, then no backup for N days); "run when the
+   NAS is reachable" (plan) still needs a retry policy.
 6. **Deleting a job never deletes backups.** Removing a destination or deleting snapshots is not in the API
    yet.
+7. **Restore to the original folder** (Phase 3) writes into the user's own folder as LocalSystem. It never
+   replaces: missing items move in, identical files are left, a differing file is kept and the restored copy goes
+   beside it as `name (restored yyyy-MM-dd HHmm).ext`; a file or link standing where a folder belongs is kept and
+   the folder is restored beside it; links in the restored tree are moved as links, never followed. Items that
+   cannot be moved stay in the staging folder, which is then unhidden and named in the run's message. A staging
+   folder left by a crash is deleted at the next start (it only holds restored copies).
+8. **Email password** (Phase 3): DPAPI machine scope like repository passwords, write-only over the API, kept
+   out of logs; MailKit's protocol log is never enabled. Unencrypted SMTP is allowed only without a login.
+9. **Alerts by email** go to whatever addresses an administrator enters; their text names jobs and folder paths.
 
 ## Not done yet
 

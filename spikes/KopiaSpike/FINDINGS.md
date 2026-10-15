@@ -117,13 +117,24 @@ a test in `tests/CashGear.Backup.Engine.Kopia.IntegrationTests`.
 | 17 | A running `kopia.exe` can be renamed but not written | The pin check before every start catches a binary swapped while the old one runs (tested) |
 | 18 | `Uploaded Bytes` was 28 MB in a throttled run against 204 B in Phase 0 for similar data | Confirms Phase 0 #5: never show it |
 
+## Phase 3: verification and browsing
+
+Observed against the same pinned binary (2026-10-15); covered by `Engine/VerifyTests.cs` and `Engine/BrowseTests.cs`.
+
+| # | Observed | Consequence |
+|---|---|---|
+| 1 | No REST call verifies a repository. `kopia snapshot verify --json --sources=<user@host:path> --verify-files-percent=N` prints one JSON line on stdout: `{"stats":{"processedObjectCount","readFileCount","readBytes",...},"errorCount":n,"errorStrings":[...]}`; exit code 1 when anything is wrong | `KopiaBackupEngine.VerifyAsync` runs it through `Hosting/KopiaCommand` (pinned binary checked first, Job Object, scrubbed `KOPIA_*`, password only in the child's environment) and parses that line |
+| 2 | **Reads served from the local content cache are not checked against the destination**: with a pack corrupted at the destination, verify at 100 % still passes after anything (a backup, a restore, an earlier verify) has cached the contents | Verify runs on a throwaway copy of `repository.config` whose `caching.cacheDirectory` is a new, empty folder, deleted afterwards. Then the damage shows (`invalid checksum ... cipher: message authentication failed`) |
+| 3 | `--verify-files-percent=0` checks that every object of every snapshot is in the index, without reading contents; it passes with damaged packs | The share read back is a setting (default 5 %, plan) |
+| 4 | The CLI verify runs fine beside the server on the same repository | No need to stop the server |
+| 5 | A directory object for an **empty folder** has `"entries": null`, which replaced the DTO's empty list; `BrowseAsync` then threw (Phase 1a bug, found by the agent's snapshot search walking every folder) | Fixed in `DirectoryManifest`; `BrowseTests` covers it |
+
 ## Not covered yet
 
 - Running as LocalSystem in a Windows Service (cache/log locations, `%LOCALAPPDATA%` defaults avoided by flags).
 - Volume Shadow Copy under LocalSystem and locked files; paths over 260 characters; symlinks and junctions.
-- Verification and maintenance: no REST endpoint, so `IBackupEngine.VerifyAsync` and
-  `RunMaintenanceAsync` throw `NotSupportedException`. Kopia's own server-side maintenance (Phase 1a #8)
-  is the open question.
+- ~~Verification~~ done in Phase 3 (above). `RunMaintenanceAsync` stays unsupported: Kopia's server owns
+  maintenance (decision 1 below).
 - SMB, SFTP and S3 destinations (only `FileSystemDestination` exists).
 - A server restart in the middle of a backup: the engine marks the run Failed; any checkpoint Kopia
   saved is not inspected.
@@ -135,6 +146,8 @@ These touch passwords, deletion, retention or restore (CLAUDE.md rule 10), or ch
 1. **Maintenance owner (#8):** either let the Kopia server run its own maintenance and drop the planned
    Quartz maintenance jobs, or switch Kopia's automatic maintenance off when a repository is created and
    run ours. Full maintenance deletes unreferenced data, so there must be exactly one owner.
+   **Phase 3 went with the first (no code change): Kopia's server owns maintenance and the agent schedules
+   none.** Reverse it only together with switching Kopia's off.
 2. **Default retention** in `RetentionRule.Default`: 10 latest, 7 daily, 4 weekly, 24 monthly, 3 annual,
    no hourly (Kopia's defaults minus hourly). `KeepLatest >= 1` is enforced.
 3. **Skipped files:** a run with unreadable files is `CompletedWithWarnings` (a usable snapshot exists).

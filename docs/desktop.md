@@ -75,6 +75,21 @@ With `Agent__AllowNonElevatedManage=true` on the agent, Manage calls go straight
 page, set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` before starting the app and use the
 DevTools protocol on `http://127.0.0.1:9333/json` (Debug builds also open DevTools with F12).
 
+## Phase 3 in the app
+
+- **Dashboard:** an alerts panel (most serious first), "Check backups" per job with the last check's result.
+  Checks are never counted as backups.
+- **Restore:** restore points grouped by day; name search over the whole restore point (pick a result, or show
+  its folder); restore into a new folder (default) or back where it came from (keeps both versions).
+- **Settings** (`/settings`): alert and check intervals, the share of files read back, email, a test email, and
+  a Recovery Kit per destination (without its password).
+- **Recovery Kit:** `UI.Components/Model/RecoveryKit.cs` writes a one-page PDF by hand (standard fonts, no
+  dependencies; paths and password in a fixed-width font). The wizard offers it right after creating a
+  destination; the password goes on the page only when ticked. A password with characters outside Latin-1
+  cannot be printed with those fonts and is left off with a note.
+- **Tray:** colour and tooltip follow the most serious alert; a Windows notification for alerts not shown since
+  the app started.
+
 ## Findings while building it
 
 | # | Observed | Consequence |
@@ -106,6 +121,13 @@ DevTools protocol on `http://127.0.0.1:9333/json` (Debug builds also open DevToo
 6. **Mapped drives:** the folder dialog turns `Z:\...` into `\\server\share\...` because the service cannot see the
    user's drive letters. The service then reaches the share as the computer account, which often has no access;
    share credentials are not supported yet.
+7. **Recovery Kit with the password** (Phase 3): off by default. When ticked, the PDF holds the repository
+   password in clear; the page says so next to the box. The wizard keeps the password in memory until the kit page
+   is left (Done, or leaving the page), so it can be added after the fact.
+8. **Email password field** (Phase 3) is write-only: sent when typed, cleared from the page after every save
+   attempt, shown only as "saved".
+9. **Restore back to the original folder** (Phase 3) is offered next to "into a new folder", which stays the
+   default; the page explains that nothing is replaced. See docs/agent.md, review item 7.
 
 ## Not done yet
 

@@ -10,12 +10,13 @@ customer sees is .NET 10 C#.
   disagrees with the plan, FINDINGS wins (it was observed against the pinned binary).
 - **Agent design, security model and its findings:** [docs/agent.md](docs/agent.md).
 - **Desktop app design (elevation, pipe check), findings and review items:** [docs/desktop.md](docs/desktop.md).
-- **Status:** Foundation, Phase 0, Phase 1 (engine 1a, agent 1b) and Phase 2 done: the desktop app (WPF +
-  BlazorWebView, tray icon, single instance) with dashboard, job wizard, restore and history, talking to the agent
-  through `IAgentClient`; Manage calls go through a UAC-elevated helper. Phase 2 leaves out SMB-with-credentials,
-  SFTP and S3 destinations (the agent supports folders only). Next: those destinations, or Phase 3 (restore wizard
-  with search, verify jobs, alerts, Recovery Kit). Open decisions are at the end of FINDINGS, docs/agent.md and
-  docs/desktop.md.
+- **Status:** Foundation, Phase 0, Phase 1 (engine 1a, agent 1b), Phase 2 (desktop app) and Phase 3 (restore and
+  safety) done. Phase 3 added: snapshot timeline and name search, restore back to the original folder keeping
+  both versions, checks of backups (on demand and scheduled; `kopia snapshot verify` with a sampled read-back),
+  alerts (failed backup or check, skipped files, no backup for N days) by tray notification and email, a
+  settings page, and the Recovery Kit PDF. Still open from Phase 2: SMB-with-credentials, SFTP and S3
+  destinations (the agent supports folders only). Next: those destinations, or Phase 4 (installer, signing,
+  updates, licence). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
 
 ## Architecture
 
@@ -45,9 +46,11 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
    values. Redact any JSON `password` field before writing a request anywhere.
 3. **Async everywhere.** No `.Result`, `.Wait()` or `GetAwaiter().GetResult()`; pass
    `CancellationToken` all the way down.
-4. **Restore never overwrites by default.** All `overwrite*` flags false, target is a new empty
-   folder, and always send `restoreDirEntryAtDepth = int.MaxValue` (Kopia's REST default of 0 writes
-   `.kopia-entry` placeholder files instead of real files).
+4. **Restore never overwrites.** Every engine restore has all `overwrite*` flags false, targets a new empty
+   folder, and sends `restoreDirEntryAtDepth = int.MaxValue` (Kopia's REST default of 0 writes
+   `.kopia-entry` placeholder files instead of real files). "Back to the original folder" is the engine restoring
+   into a new, empty staging folder inside the job's folder, then `Agent/Runs/KeepBothMerge` moving items in
+   without replacing anything (differing files keep both versions; links are moved, never followed).
 5. **Never mark a run Succeeded** unless there is exactly one new snapshot ID, `summary.numFailed == 0`,
    `summary.numIgnoredErrors == 0` and no `incomplete` flag. Kopia's server reports task SUCCESS even
    when files failed and when the run was canceled (`incomplete: "canceled"`). The rule lives in
@@ -120,7 +123,7 @@ engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KE
 |---|---|
 | `src/CashGear.Backup.Core` | Domain types and `IBackupEngine` (engine-agnostic) |
 | `src/CashGear.Backup.Engine.Kopia` | The only Kopia-aware code: `KopiaBackupEngine`; `Api/` REST client and DTOs, `Hosting/` process host, pin, Job Object, `Policy/` job-to-policy mapping, `Runs/` run tracking and the rule-5 classifier |
-| `src/CashGear.Backup.Agent` | Windows Service: `AgentHost` (pipe-only Kestrel, gRPC), `Api/`, `Runs/`, `Scheduling/` (Quartz), `Security/` (DPAPI, caller checks), `Hosting/` (lifecycle, pipe ACL). Later: notifications, updater |
+| `src/CashGear.Backup.Agent` | Windows Service: `AgentHost` (pipe-only Kestrel, gRPC), `Api/`, `Runs/` (runs, checks, keep-both merge, snapshot search), `Scheduling/` (Quartz), `Notifications/` (settings, alerts, email, housekeeping), `Security/` (DPAPI, caller checks), `Hosting/` (lifecycle, pipe ACL). Later: updater |
 | `src/CashGear.Backup.Data` | EF Core + SQLite state.db: destinations, jobs, run history, settings; `Migrations/` |
 | `src/CashGear.Backup.Contracts` | `Protos/backup_agent.proto` (the desktop app's API) and `AgentChannel` (named-pipe gRPC channel) |
 | `src/CashGear.Backup.Client` | The app's side of the API: `IAgentClient`/`AgentClient`, `Security/` pipe-server check, `Elevation/` UAC helper (both ends) |
