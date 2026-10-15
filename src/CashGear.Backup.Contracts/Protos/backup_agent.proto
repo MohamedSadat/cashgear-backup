@@ -1,0 +1,341 @@
+syntax = "proto3";
+
+package cashgear.backup.v1;
+
+option csharp_namespace = "CashGear.Backup.Contracts.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// The agent's API for the desktop app. Served only on a local named pipe (AgentChannel), never on TCP.
+//
+// Access levels (enforced by the agent): read calls are open to anyone the pipe lets in (the interactive
+// user and administrators); RunJobNow and CancelRun too; calls marked "Manage" need an elevated
+// administrator unless the agent is configured otherwise.
+//
+// Errors are gRPC statuses; the trailer "cashgear-error-kind" carries the engine-neutral error kind
+// (for example "InvalidPassword", "RestoreTargetNotEmpty") for the UI to act on.
+service BackupAgent {
+  rpc GetStatus (GetStatusRequest) returns (AgentStatus);
+
+  rpc ListDestinations (ListDestinationsRequest) returns (ListDestinationsResponse);
+  // Manage. Initializes a new, encrypted repository at the location and remembers it.
+  rpc CreateDestination (CreateDestinationRequest) returns (Destination);
+  // Manage. Adds an existing repository (a reinstall, or another PC's repository).
+  rpc ConnectDestination (ConnectDestinationRequest) returns (Destination);
+
+  rpc ListJobs (ListJobsRequest) returns (ListJobsResponse);
+  // Manage.
+  rpc CreateJob (CreateJobRequest) returns (Job);
+  // Manage. The destination and source folder of a job cannot change; create a new job instead.
+  rpc UpdateJob (UpdateJobRequest) returns (Job);
+  // Manage. Removes the job definition only: its backups stay in the repository.
+  rpc DeleteJob (DeleteJobRequest) returns (DeleteJobResponse);
+  rpc RunJobNow (RunJobNowRequest) returns (Run);
+
+  rpc ListRuns (ListRunsRequest) returns (ListRunsResponse);
+  // Progress of a run until it ends. The last message has `finished` set; a finished run sends only that.
+  rpc WatchRun (WatchRunRequest) returns (stream RunProgress);
+  rpc CancelRun (CancelRunRequest) returns (CancelRunResponse);
+
+  rpc ListSnapshots (ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc BrowseSnapshot (BrowseSnapshotRequest) returns (BrowseSnapshotResponse);
+  // Manage. Restores into a new or empty folder; never overwrites.
+  rpc StartRestore (StartRestoreRequest) returns (Run);
+}
+
+message GetStatusRequest {}
+
+message AgentStatus {
+  string agent_version = 1;
+  // The stable name this PC's snapshots are recorded under.
+  string machine_identity = 2;
+  google.protobuf.Timestamp started_at = 3;
+  // False while the agent is still connecting its destinations after a start.
+  bool ready = 4;
+  // Whether the caller may use the "Manage" calls.
+  bool caller_can_manage = 5;
+}
+
+enum DestinationKind {
+  DESTINATION_KIND_UNSPECIFIED = 0;
+  // A local disk, removable drive or UNC share the agent can reach.
+  DESTINATION_KIND_FILE_SYSTEM = 1;
+}
+
+enum DestinationState {
+  DESTINATION_STATE_UNSPECIFIED = 0;
+  DESTINATION_STATE_CONNECTED = 1;
+  DESTINATION_STATE_UNAVAILABLE = 2;
+  DESTINATION_STATE_CONNECTING = 3;
+}
+
+message Destination {
+  string id = 1;
+  string name = 2;
+  DestinationKind kind = 3;
+  string location = 4;
+  DestinationState state = 5;
+  // Why the destination is unavailable.
+  string state_message = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ListDestinationsRequest {}
+
+message ListDestinationsResponse {
+  repeated Destination destinations = 1;
+}
+
+// Carries the repository password: never log this message.
+message CreateDestinationRequest {
+  string name = 1;
+  DestinationKind kind = 2;
+  string location = 3;
+  string password = 4;
+}
+
+// Carries the repository password: never log this message.
+message ConnectDestinationRequest {
+  string name = 1;
+  DestinationKind kind = 2;
+  string location = 3;
+  string password = 4;
+}
+
+message Retention {
+  // At least 1.
+  int32 keep_latest = 1;
+  int32 keep_hourly = 2;
+  int32 keep_daily = 3;
+  int32 keep_weekly = 4;
+  int32 keep_monthly = 5;
+  int32 keep_annual = 6;
+}
+
+enum Compression {
+  // Treated as BALANCED.
+  COMPRESSION_UNSPECIFIED = 0;
+  COMPRESSION_OFF = 1;
+  COMPRESSION_FASTEST = 2;
+  COMPRESSION_BALANCED = 3;
+  COMPRESSION_SMALLEST = 4;
+}
+
+message Schedule {
+  oneof kind {
+    ManualSchedule manual = 1;
+    DailySchedule daily = 2;
+    IntervalSchedule interval = 3;
+  }
+}
+
+message ManualSchedule {}
+
+message DailySchedule {
+  // Local time, 0-1439.
+  int32 minute_of_day = 1;
+  // 0 = Sunday ... 6 = Saturday; empty means every day.
+  repeated int32 days_of_week = 2;
+}
+
+message IntervalSchedule {
+  // 1-24.
+  int32 hours = 1;
+}
+
+message JobSpec {
+  string name = 1;
+  string destination_id = 2;
+  string source_path = 3;
+  // Absent: the default retention.
+  Retention retention = 4;
+  // gitignore-style patterns relative to the source folder.
+  repeated string excludes = 5;
+  Compression compression = 6;
+  // Absent: manual.
+  Schedule schedule = 7;
+  bool enabled = 8;
+}
+
+message Job {
+  string id = 1;
+  JobSpec spec = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  // The latest backup run, if any.
+  Run last_run = 5;
+  google.protobuf.Timestamp next_run_at = 6;
+}
+
+message ListJobsRequest {}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CreateJobRequest {
+  JobSpec spec = 1;
+}
+
+message UpdateJobRequest {
+  string id = 1;
+  JobSpec spec = 2;
+}
+
+message DeleteJobRequest {
+  string id = 1;
+}
+
+message DeleteJobResponse {}
+
+message RunJobNowRequest {
+  string job_id = 1;
+}
+
+enum RunKind {
+  RUN_KIND_UNSPECIFIED = 0;
+  RUN_KIND_BACKUP = 1;
+  RUN_KIND_RESTORE = 2;
+}
+
+enum RunState {
+  RUN_STATE_UNSPECIFIED = 0;
+  RUN_STATE_RUNNING = 1;
+  // A new, complete restore point with nothing skipped (or a restore of every item).
+  RUN_STATE_SUCCEEDED = 2;
+  // A restore point exists but some items could not be read; see failed_items.
+  RUN_STATE_COMPLETED_WITH_WARNINGS = 3;
+  RUN_STATE_FAILED = 4;
+  RUN_STATE_CANCELED = 5;
+}
+
+enum RunTrigger {
+  RUN_TRIGGER_UNSPECIFIED = 0;
+  RUN_TRIGGER_MANUAL = 1;
+  RUN_TRIGGER_SCHEDULED = 2;
+  // A scheduled time passed while the PC was off or asleep.
+  RUN_TRIGGER_CATCH_UP = 3;
+}
+
+message FailedItem {
+  string path = 1;
+  string error = 2;
+}
+
+message Run {
+  string id = 1;
+  string job_id = 2;
+  RunKind kind = 3;
+  RunState state = 4;
+  RunTrigger trigger = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp finished_at = 7;
+  // Backup: the restore point it recorded. Restore: the snapshot restored from.
+  string snapshot_id = 8;
+  int64 files = 9;
+  int64 bytes = 10;
+  int64 failed_item_count = 11;
+  // The first failed items; failed_item_count is exact.
+  repeated FailedItem failed_items = 12;
+  string message = 13;
+  string restore_target = 14;
+}
+
+message ListRunsRequest {
+  // Empty: runs of every job.
+  string job_id = 1;
+  // Newest first; 0 means 50.
+  int32 limit = 2;
+}
+
+message ListRunsResponse {
+  repeated Run runs = 1;
+}
+
+message WatchRunRequest {
+  string run_id = 1;
+}
+
+message RunProgress {
+  string run_id = 1;
+  RunState state = 2;
+  // Backup: files and bytes examined so far. Restore: restored so far.
+  int64 files_processed = 3;
+  int64 bytes_processed = 4;
+  // Backup: new or changed data read.
+  int64 files_hashed = 5;
+  int64 bytes_hashed = 6;
+  // Backup: the engine's size estimate; 0 when unknown.
+  int64 estimated_files = 7;
+  int64 estimated_bytes = 8;
+  int64 error_count = 9;
+  // Set on the last message only.
+  Run finished = 10;
+}
+
+message CancelRunRequest {
+  string run_id = 1;
+}
+
+message CancelRunResponse {}
+
+message Snapshot {
+  string id = 1;
+  string job_id = 2;
+  string source_path = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int64 files = 6;
+  int64 directories = 7;
+  int64 bytes = 8;
+  int64 failed_item_count = 9;
+  // False for a partial snapshot (for example a canceled run); never offer it as a restore point by default.
+  bool complete = 10;
+  string incomplete_reason = 11;
+}
+
+message ListSnapshotsRequest {
+  string job_id = 1;
+}
+
+message ListSnapshotsResponse {
+  // Newest first.
+  repeated Snapshot snapshots = 1;
+}
+
+enum EntryKind {
+  ENTRY_KIND_UNSPECIFIED = 0;
+  ENTRY_KIND_FILE = 1;
+  ENTRY_KIND_DIRECTORY = 2;
+  ENTRY_KIND_SYMLINK = 3;
+  ENTRY_KIND_OTHER = 4;
+}
+
+message SnapshotEntry {
+  string name = 1;
+  // Relative to the snapshot root, '/'-separated.
+  string path = 2;
+  EntryKind kind = 3;
+  int64 size = 4;
+  google.protobuf.Timestamp modified_at = 5;
+}
+
+message BrowseSnapshotRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Folder inside the snapshot; empty for the root.
+  string path = 3;
+}
+
+message BrowseSnapshotResponse {
+  repeated SnapshotEntry entries = 1;
+}
+
+message StartRestoreRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Folder or file inside the snapshot; empty restores everything.
+  string path = 3;
+  // Absolute path of a folder that does not exist yet or is empty.
+  string target_folder = 4;
+}

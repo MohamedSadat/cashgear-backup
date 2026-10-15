@@ -1,8 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- .proto files and generated gRPC types shared by the agent and the desktop app (Phase 1). -->
+  <!-- .proto files and generated gRPC types shared by the agent and the desktop app, plus the named-pipe channel. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\backup_agent.proto" GrpcServices="Both" />
+  </ItemGroup>
 
 </Project>
