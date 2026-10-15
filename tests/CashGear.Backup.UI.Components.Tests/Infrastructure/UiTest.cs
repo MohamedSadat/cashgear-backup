@@ -68,7 +68,22 @@ internal sealed class FakeShell : IDesktopShell
 
     public List<string> Opened { get; } = [];
 
+    public List<(string Name, byte[] Content)> SavedFiles { get; } = [];
+
+    /// <summary>Null makes the save dialog look canceled.</summary>
+    public string? SaveAnswer { get; set; } = @"C:\Users\pat\Documents\saved.pdf";
+
     public void OpenFolder(string path) => Opened.Add(path);
+
+    public Task<string?> SaveFileAsync(string suggestedName, byte[] content, CancellationToken ct)
+    {
+        if (SaveAnswer is not null)
+        {
+            SavedFiles.Add((suggestedName, content));
+        }
+
+        return Task.FromResult(SaveAnswer);
+    }
 }
 
 /// <summary>Test data. "Now" is Thursday 15 Oct 2026, 12:00 UTC, and the local time zone is UTC.</summary>

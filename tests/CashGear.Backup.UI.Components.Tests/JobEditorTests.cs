@@ -50,7 +50,53 @@ public class JobEditorTests : UiTest
         Assert.Equal(Compression.Balanced, spec.Compression);
 
         Assert.True(Agent.Calls.ToList().IndexOf("CreateDestination") < Agent.Calls.ToList().IndexOf("CreateJob"));
+
+        // A new destination ends with the Recovery Kit offer; Done goes to the dashboard.
+        cut.WaitForElement("#recovery-kit-panel");
+        Assert.NotEqual(Navigation.BaseUri, Navigation.Uri);
+        await cut.Find("#done").ClickAsync(new());
         cut.WaitForAssertion(() => Assert.Equal(Navigation.BaseUri, Navigation.Uri));
+    }
+
+    [Fact]
+    public async Task Offers_a_recovery_kit_for_a_new_destination_with_the_password_only_if_asked()
+    {
+        await ConnectAsync();
+        var cut = await ReviewNewJobAsync();
+        await cut.Find("#save").ClickAsync(new());
+        cut.WaitForElement("#recovery-kit-panel");
+
+        Assert.False(cut.Find("#kit-include-password").HasAttribute("checked"));
+        await cut.Find("#save-kit").ClickAsync(new());
+        cut.Find("#kit-include-password").Change(true);
+        await cut.Find("#save-kit").ClickAsync(new());
+
+        Assert.Equal(2, Shell.SavedFiles.Count);
+        Assert.All(Shell.SavedFiles, f => Assert.Equal("CashGear Recovery Kit - Backup disk.pdf", f.Name));
+        var without = System.Text.Encoding.Latin1.GetString(Shell.SavedFiles[0].Content);
+        var with = System.Text.Encoding.Latin1.GetString(Shell.SavedFiles[1].Content);
+        Assert.DoesNotContain(Password, without, StringComparison.Ordinal);
+        Assert.Contains("Write the password here", without, StringComparison.Ordinal);
+        Assert.Contains(Password, with, StringComparison.Ordinal);
+        Assert.Contains("Saved", cut.Find("#kit-saved").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_existing_destination_needs_no_recovery_kit_step()
+    {
+        Agent.Destinations.Add(Destination());
+        await ConnectAsync();
+        var cut = Render<JobEditor>();
+        FillWhat(cut);
+        await NextAsync(cut);
+        await NextAsync(cut);
+        await NextAsync(cut);
+        await NextAsync(cut);
+
+        await cut.Find("#save").ClickAsync(new());
+
+        cut.WaitForAssertion(() => Assert.Equal(Navigation.BaseUri, Navigation.Uri));
+        Assert.Empty(cut.FindAll("#recovery-kit-panel"));
     }
 
     [Fact]

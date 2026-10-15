@@ -184,6 +184,28 @@ public class BackupOverviewTests
     }
 }
 
+public class OverviewWithAlertsTests
+{
+    [Fact]
+    public void Alerts_decide_the_overview_once_the_agent_is_ready()
+    {
+        var ok = Job("a", "Photos", BackupRun("1", RunState.Succeeded, Today(9, 0), "a"));
+        Alert[] alerts =
+        [
+            new() { Kind = AlertKind.NoRecentBackup, JobName = "Photos", Message = "The last backup was 5 days ago." },
+            new() { Kind = AlertKind.VerifyFailed, JobName = "Photos", Message = "The check found 2 problem(s)." },
+        ];
+
+        var overview = BackupOverview.Summarize(AgentConnection.Ready, [ok], alerts);
+
+        Assert.Equal(OverviewLevel.Problem, overview.Level);
+        Assert.Equal("Photos: The check found 2 problem(s).", overview.Text);
+        Assert.Equal(OverviewLevel.Warning, BackupOverview.Summarize(AgentConnection.Ready, [ok], [alerts[0]]).Level);
+        Assert.Equal(OverviewLevel.Problem, BackupOverview.Summarize(AgentConnection.NotRunning, [ok], alerts).Level);
+        Assert.Equal("The backup service is not running", BackupOverview.Summarize(AgentConnection.NotRunning, [ok], alerts).Text);
+    }
+}
+
 public class AgentMonitorTests
 {
     [Fact]

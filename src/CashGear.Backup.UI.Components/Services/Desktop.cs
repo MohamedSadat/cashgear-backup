@@ -15,6 +15,9 @@ public interface IDesktopShell
 
     /// <summary>Opens a folder in Explorer.</summary>
     void OpenFolder(string path);
+
+    /// <summary>Asks where to save a file (the Windows save dialog) and writes it; null when the user canceled.</summary>
+    Task<string?> SaveFileAsync(string suggestedName, byte[] content, CancellationToken ct);
 }
 
 /// <summary>Timing knobs; tests turn the background refresh off.</summary>

@@ -14,6 +14,8 @@ public enum OverviewLevel
 /// <summary>One line about all backups, for the tray icon.</summary>
 public sealed record BackupOverview(OverviewLevel Level, string Text)
 {
+    public static BackupOverview Summarize(AgentConnection connection, IReadOnlyList<Job>? jobs, IReadOnlyList<Alert> alerts) => Summarize(connection, jobs);
+
     public static BackupOverview Summarize(AgentConnection connection, IReadOnlyList<Job>? jobs)
     {
         switch (connection)
