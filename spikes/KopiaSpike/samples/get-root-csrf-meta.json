@@ -1,0 +1,10 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/",
+  "request": null,
+  "status": 200,
+  "contentType": "text/html; charset=utf-8",
+  "elapsedMs": 122,
+  "response": "<!doctype html><html><head><title>CashGear v0.23.1</title><meta name=\"kopia-csrf-token\" content=\"***csrf-token***\" /></head><body></body></html>"
+}

@@ -1,0 +1,355 @@
+{
+  "runId": "20261015-144503-5dae",
+  "kopiaVersion": "0.23.1",
+  "artifactsDirectory": "D:\\CashGear\\Projects\\cashgear-backup\\artifacts\\spike\\20261015-144503-5dae",
+  "checks": [
+    {
+      "name": "csrf.required",
+      "passed": true,
+      "detail": "UI call without CSRF token: HTTP 401 Invalid or missing CSRF token."
+    },
+    {
+      "name": "csrf.accepted",
+      "passed": true,
+      "detail": "UI call with cookie + CSRF token: HTTP 200"
+    },
+    {
+      "name": "auth.control-user-cannot-use-ui-api",
+      "passed": true,
+      "detail": "control user: GET / -> HTTP 403 (CSRF token issued: False); UI endpoint with its own session -> HTTP 401 Invalid or missing CSRF token."
+    },
+    {
+      "name": "tls.pin-mismatch-rejected",
+      "passed": true,
+      "detail": "a client pinned to a different certificate must fail the TLS handshake"
+    },
+    {
+      "name": "repo.create",
+      "passed": true,
+      "detail": "connected=True, storage=filesystem, format v3"
+    },
+    {
+      "name": "source.registered",
+      "passed": true,
+      "detail": "1 source(s); ours present: True"
+    },
+    {
+      "name": "backup.1",
+      "passed": true,
+      "detail": "task SUCCESS; new snapshots 1; numFailed 0; incomplete ''"
+    },
+    {
+      "name": "restore.1.task",
+      "passed": true,
+      "detail": "SUCCESS "
+    },
+    {
+      "name": "roundtrip.snapshot1",
+      "passed": true,
+      "detail": "209 files, 12 directories, 16139776 bytes identical (SHA-256)"
+    },
+    {
+      "name": "backup.2",
+      "passed": true,
+      "detail": "task SUCCESS; new snapshots 1; numFailed 0; incomplete ''"
+    },
+    {
+      "name": "roundtrip.latest",
+      "passed": true,
+      "detail": "209 files, 14 directories, 16136422 bytes identical (SHA-256)"
+    },
+    {
+      "name": "roundtrip.point-in-time",
+      "passed": true,
+      "detail": "209 files, 12 directories, 16139776 bytes identical (SHA-256)"
+    },
+    {
+      "name": "restore.never-overwrites",
+      "passed": true,
+      "detail": "task FAILED: error restoring: restore error: error copying: create directory: error creating directory: non-empty directory already exists, not overwriting it: \"<workspace>\\\\restores\\\\r1-snapshot1\"; changes in target: 0"
+    },
+    {
+      "name": "shutdown.graceful",
+      "passed": true,
+      "detail": "stopped by control-api in 70 ms, exit code 0"
+    },
+    {
+      "name": "restart.with-env-password",
+      "passed": true,
+      "detail": "connected=True; snapshots before restart 2, after 2"
+    },
+    {
+      "name": "secrets.no-password-file",
+      "passed": true,
+      "detail": "no *.kopia-password files"
+    },
+    {
+      "name": "secrets.no-credential-manager-entry",
+      "passed": true,
+      "detail": "cmdkey /list shows no Kopia entries"
+    },
+    {
+      "name": "secrets.no-leaks",
+      "passed": true,
+      "detail": "322 files scanned, no generated password found"
+    }
+  ],
+  "observations": {
+    "backup.1": {
+      "uploadResponse": {
+        "sources": {
+          "cashgear@spike-host:<workspace>\\source-Ünï": {
+            "success": true
+          }
+        }
+      },
+      "task": {
+        "kind": "Snapshot",
+        "description": "cashgear@spike-host:<workspace>\\source-Ünï at 2026-10-15T17:45:06+03:00",
+        "status": "SUCCESS",
+        "counters": {
+          "Cached Bytes": {
+            "value": 0,
+            "units": "bytes",
+            "level": ""
+          },
+          "Cached Files": {
+            "value": 0,
+            "units": null,
+            "level": ""
+          },
+          "Errors": {
+            "value": 0,
+            "units": null,
+            "level": "error"
+          },
+          "Excluded Directories": {
+            "value": 0,
+            "units": null,
+            "level": ""
+          },
+          "Excluded Files": {
+            "value": 0,
+            "units": null,
+            "level": ""
+          },
+          "Hashed Bytes": {
+            "value": 16139776,
+            "units": "bytes",
+            "level": ""
+          },
+          "Hashed Files": {
+            "value": 209,
+            "units": null,
+            "level": ""
+          },
+          "Processed Bytes": {
+            "value": 16139776,
+            "units": "bytes",
+            "level": ""
+          },
+          "Processed Files": {
+            "value": 209,
+            "units": null,
+            "level": ""
+          },
+          "Uploaded Bytes": {
+            "value": 204,
+            "units": "bytes",
+            "level": ""
+          }
+        }
+      },
+      "sourceStatusTimeline": [
+        "UPLOADING",
+        "IDLE"
+      ],
+      "summary": {
+        "size": 16139776,
+        "files": 209,
+        "symlinks": 0,
+        "dirs": 13,
+        "numFailed": 0,
+        "numIgnoredErrors": 0,
+        "maxTime": "2026-10-15T14:45:06.2569856Z"
+      },
+      "elapsedMs": 320
+    },
+    "backup.2": {
+      "uploadResponse": {
+        "sources": {
+          "cashgear@spike-host:<workspace>\\source-Ünï": {
+            "success": true
+          }
+        }
+      },
+      "task": {
+        "kind": "Snapshot",
+        "description": "cashgear@spike-host:<workspace>\\source-Ünï at 2026-10-15T17:45:08+03:00",
+        "status": "SUCCESS",
+        "counters": {
+          "Cached Bytes": {
+            "value": 3553492,
+            "units": "bytes",
+            "level": ""
+          },
+          "Cached Files": {
+            "value": 206,
+            "units": null,
+            "level": ""
+          },
+          "Errors": {
+            "value": 0,
+            "units": null,
+            "level": "error"
+          },
+          "Excluded Directories": {
+            "value": 0,
+            "units": null,
+            "level": ""
+          },
+          "Excluded Files": {
+            "value": 0,
+            "units": null,
+            "level": ""
+          },
+          "Hashed Bytes": {
+            "value": 12582930,
+            "units": "bytes",
+            "level": ""
+          },
+          "Hashed Files": {
+            "value": 3,
+            "units": null,
+            "level": ""
+          },
+          "Processed Bytes": {
+            "value": 16136422,
+            "units": "bytes",
+            "level": ""
+          },
+          "Processed Files": {
+            "value": 209,
+            "units": null,
+            "level": ""
+          },
+          "Uploaded Bytes": {
+            "value": 204,
+            "units": "bytes",
+            "level": ""
+          }
+        }
+      },
+      "sourceStatusTimeline": [
+        "UPLOADING",
+        "IDLE"
+      ],
+      "summary": {
+        "size": 16136422,
+        "files": 209,
+        "symlinks": 0,
+        "dirs": 15,
+        "numFailed": 0,
+        "numIgnoredErrors": 0,
+        "maxTime": "2026-10-15T14:45:08.2571799Z"
+      },
+      "elapsedMs": 277
+    },
+    "fixture": {
+      "files": 209,
+      "directories": 12,
+      "bytes": 16139776
+    },
+    "metrics.withoutAuth": 401,
+    "repo.createResponse.connected": false,
+    "repo.status": {
+      "connected": true,
+      "configFile": "<workspace>\\config\\repository.config",
+      "formatVersion": 3,
+      "hash": "BLAKE2B-256-128",
+      "encryption": "AES256-GCM-HMAC-SHA256",
+      "ecc": null,
+      "splitter": "DYNAMIC-4M-BUZHASH",
+      "maxPackSize": 20971520,
+      "storage": "filesystem",
+      "supportsContentCompression": true,
+      "hostname": "spike-host",
+      "username": "cashgear",
+      "initTaskID": null,
+      "description": "CashGear spike",
+      "enableActions": false,
+      "formatBlobCacheDuration": 900000000000
+    },
+    "restore.1.metadata": {
+      "filesCompared": 209,
+      "fileMtimesPreserved": 209,
+      "dirsCompared": 12,
+      "dirMtimesPreserved": 8,
+      "dirMtimesDiffering": [
+        "big",
+        "nested",
+        "nested/empty-leaf",
+        "nested/empty-leaf/x"
+      ],
+      "readOnlyPreserved": "1/1",
+      "hiddenPreserved": "0/1"
+    },
+    "restore.depthOmitted": {
+      "status": "SUCCESS",
+      "placeholderFiles": 8,
+      "otherFiles": 0,
+      "sample": [
+        "empty.txt.kopia-entry",
+        "added.kopia-entry\\.kopia-entry",
+        "attrs.kopia-entry\\.kopia-entry"
+      ]
+    },
+    "server-1.addressFormat": "https://127.0.0.1:<port>",
+    "server-1.controlStatusBeforeRepo": {
+      "connected": false
+    },
+    "server.arguments": [
+      "server",
+      "start",
+      "--config-file=<workspace>\\config\\repository.config",
+      "--cache-directory=<workspace>\\cache",
+      "--log-dir=<workspace>\\kopia-logs",
+      "--address=127.0.0.1:0",
+      "--tls-cert-file=<workspace>\\tls\\server.crt",
+      "--tls-key-file=<workspace>\\tls\\server.key",
+      "--ui",
+      "--html=<workspace>\\html",
+      "--no-grpc",
+      "--shutdown-on-stdin",
+      "--no-persist-credentials",
+      "--no-use-credential-manager"
+    ],
+    "source.createResponse": {
+      "snapshotted": false
+    },
+    "sources.identity": {
+      "localUsername": "cashgear",
+      "localHost": "spike-host",
+      "multiUser": true
+    },
+    "start.withoutPassword": {
+      "outcome": "failed-to-start",
+      "exitCode": 1,
+      "elapsedMs": 648,
+      "output": [
+        "",
+        "Server will allow connections from users whose accounts are stored in the repository.",
+        "User accounts can be added using 'kopia server user add'.",
+        "",
+        "unable to initialize repository: unable to initialize repository: error opening repository: get password: password prompt error: The handle is invalid.",
+        "Enter password to open repository: "
+      ]
+    },
+    "tls.negotiated": {
+      "protocol": "Tls12",
+      "cipherSuite": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+    }
+  },
+  "fatal": null,
+  "passed": true
+}

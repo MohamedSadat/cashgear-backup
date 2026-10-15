@@ -1,0 +1,10 @@
+{
+  "client": "control",
+  "method": "POST",
+  "path": "/api/v1/control/shutdown",
+  "request": {},
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {}
+}

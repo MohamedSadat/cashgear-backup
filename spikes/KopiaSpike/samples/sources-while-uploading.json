@@ -1,0 +1,45 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/sources",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "localUsername": "cashgear",
+    "localHost": "spike-host",
+    "multiUser": true,
+    "sources": [
+      {
+        "source": {
+          "host": "spike-host",
+          "userName": "cashgear",
+          "path": "<workspace>\\source-Ünï"
+        },
+        "status": "UPLOADING",
+        "schedule": {
+          "manual": true,
+          "runMissed": true
+        },
+        "upload": {
+          "cachedBytes": 0,
+          "hashedBytes": 0,
+          "uploadedBytes": 0,
+          "estimatedBytes": 0,
+          "cachedFiles": 0,
+          "hashedFiles": 0,
+          "excludedFiles": 0,
+          "excludedDirs": 0,
+          "errors": 0,
+          "ignoredErrors": 0,
+          "estimatedFiles": 0,
+          "directory": "",
+          "lastErrorPath": "",
+          "lastError": ""
+        },
+        "currentTask": "2"
+      }
+    ]
+  }
+}

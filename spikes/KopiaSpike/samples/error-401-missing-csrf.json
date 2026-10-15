@@ -1,0 +1,10 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/repo/status",
+  "request": null,
+  "status": 401,
+  "contentType": "text/plain; charset=utf-8",
+  "elapsedMs": 43,
+  "response": "Invalid or missing CSRF token.\n\n"
+}

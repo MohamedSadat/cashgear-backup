@@ -1,0 +1,25 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/repo/status",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "connected": true,
+    "configFile": "<workspace>\\config\\repository.config",
+    "formatVersion": 3,
+    "hash": "BLAKE2B-256-128",
+    "encryption": "AES256-GCM-HMAC-SHA256",
+    "splitter": "DYNAMIC-4M-BUZHASH",
+    "maxPackSize": 20971520,
+    "storage": "filesystem",
+    "supportsContentCompression": true,
+    "hostname": "spike-host",
+    "username": "cashgear",
+    "description": "CashGear spike",
+    "enableActions": false,
+    "formatBlobCacheDuration": 900000000000
+  }
+}

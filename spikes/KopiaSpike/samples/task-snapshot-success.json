@@ -1,0 +1,64 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/tasks/2",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "id": "2",
+    "startTime": "2026-10-15T17:45:06.5700725+03:00",
+    "endTime": "2026-10-15T17:45:06.8311662+03:00",
+    "kind": "Snapshot",
+    "description": "cashgear@spike-host:<workspace>\\source-Ünï at 2026-10-15T17:45:06+03:00",
+    "status": "SUCCESS",
+    "progressInfo": "",
+    "counters": {
+      "Cached Bytes": {
+        "value": 0,
+        "units": "bytes",
+        "level": ""
+      },
+      "Cached Files": {
+        "value": 0,
+        "level": ""
+      },
+      "Errors": {
+        "value": 0,
+        "level": "error"
+      },
+      "Excluded Directories": {
+        "value": 0,
+        "level": ""
+      },
+      "Excluded Files": {
+        "value": 0,
+        "level": ""
+      },
+      "Hashed Bytes": {
+        "value": 16139776,
+        "units": "bytes",
+        "level": ""
+      },
+      "Hashed Files": {
+        "value": 209,
+        "level": ""
+      },
+      "Processed Bytes": {
+        "value": 16139776,
+        "units": "bytes",
+        "level": ""
+      },
+      "Processed Files": {
+        "value": 209,
+        "level": ""
+      },
+      "Uploaded Bytes": {
+        "value": 204,
+        "units": "bytes",
+        "level": ""
+      }
+    }
+  }
+}

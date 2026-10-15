@@ -8,7 +8,8 @@ customer sees is .NET 10 C#.
   Snapshot: [docs/plan/2026-10-15-cashgear-backup-plan.md](docs/plan/2026-10-15-cashgear-backup-plan.md).
 - **Verified Kopia behaviour:** [spikes/KopiaSpike/FINDINGS.md](spikes/KopiaSpike/FINDINGS.md). Where it
   disagrees with the plan, FINDINGS wins (it was observed against the pinned binary).
-- **Status:** Foundation + Phase 0 (spike) in progress.
+- **Status:** Foundation + Phase 0 done (Phase 0 gate green, see FINDINGS). Next: Phase 1, engine and
+  agent; start from the "Phase 1 to-do" list in FINDINGS.
 
 ## Architecture
 
@@ -53,8 +54,12 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
    - Credentials only via env vars: `KOPIA_SERVER_USERNAME/PASSWORD`,
      `KOPIA_SERVER_CONTROL_USER/PASSWORD`, `KOPIA_PASSWORD`; set `KOPIA_CHECK_FOR_UPDATES=false`.
      Start from an environment with every inherited `KOPIA_*` variable removed.
-8. **Hand review** anything touching passwords, deletion, retention or restore overwrite. Agent
-   mistakes there cost customer data.
+8. **Write the whole Kopia policy for every source** (manual scheduling, compression, retention, VSS).
+   Kopia's defaults do not compress and *do* prune with their own retention.
+9. **After `repo/create` or `repo/connect`, poll `/repo/status`**: the create response says
+   `connected:false` even when it succeeded.
+10. **Hand review** anything touching passwords, deletion, retention or restore overwrite. Agent
+    mistakes there cost customer data.
 
 ## Build and test
 

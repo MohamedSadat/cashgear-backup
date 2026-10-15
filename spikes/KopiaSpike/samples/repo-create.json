@@ -1,0 +1,30 @@
+{
+  "client": "ui",
+  "method": "POST",
+  "path": "/api/v1/repo/create",
+  "request": {
+    "storage": {
+      "type": "filesystem",
+      "config": {
+        "path": "<workspace>\\repo"
+      }
+    },
+    "password": "***redacted***",
+    "options": {},
+    "clientOptions": {
+      "hostname": "spike-host",
+      "username": "cashgear",
+      "description": "CashGear spike"
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 992,
+  "response": {
+    "connected": false,
+    "supportsContentCompression": false,
+    "hostname": "",
+    "username": "",
+    "enableActions": false
+  }
+}

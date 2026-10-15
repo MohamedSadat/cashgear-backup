@@ -1,0 +1,51 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/tasks/7",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "id": "7",
+    "startTime": "2026-10-15T17:45:10.6785701+03:00",
+    "endTime": "2026-10-15T17:45:10.6796654+03:00",
+    "kind": "Restore",
+    "description": "Destination: <workspace>\\restores\\r1-snapshot1",
+    "status": "FAILED",
+    "progressInfo": "",
+    "errorMessage": "error restoring: restore error: error copying: create directory: error creating directory: non-empty directory already exists, not overwriting it: \"<workspace>\\\\restores\\\\r1-snapshot1\"",
+    "counters": {
+      "Ignored Errors": {
+        "value": 0,
+        "level": ""
+      },
+      "Restored Bytes": {
+        "value": 0,
+        "units": "bytes",
+        "level": ""
+      },
+      "Restored Directories": {
+        "value": 1,
+        "level": ""
+      },
+      "Restored Files": {
+        "value": 0,
+        "level": ""
+      },
+      "Restored Symlinks": {
+        "value": 0,
+        "level": ""
+      },
+      "Skipped Bytes": {
+        "value": 0,
+        "units": "bytes",
+        "level": ""
+      },
+      "Skipped Files": {
+        "value": 0,
+        "level": ""
+      }
+    }
+  }
+}

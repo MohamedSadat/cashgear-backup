@@ -1,0 +1,16 @@
+{
+  "client": "control",
+  "method": "GET",
+  "path": "/api/v1/control/status",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 149,
+  "response": {
+    "connected": false,
+    "supportsContentCompression": false,
+    "hostname": "",
+    "username": "",
+    "enableActions": false
+  }
+}

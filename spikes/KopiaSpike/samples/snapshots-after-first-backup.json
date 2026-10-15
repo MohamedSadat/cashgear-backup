@@ -1,0 +1,39 @@
+{
+  "client": "ui",
+  "method": "GET",
+  "path": "/api/v1/snapshots?all=1&userName=cashgear&host=spike-host&path=<workspace>%5Csource-%C3%9Cn%C3%AF",
+  "request": null,
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "snapshots": [
+      {
+        "id": "4015d25d3e1bbca25a1a0afa3dccc8df",
+        "description": "",
+        "startTime": "2026-10-15T14:45:06.571823Z",
+        "endTime": "2026-10-15T14:45:06.695642Z",
+        "summary": {
+          "size": 16139776,
+          "files": 209,
+          "symlinks": 0,
+          "dirs": 13,
+          "maxTime": "2026-10-15T14:45:06.2569856Z",
+          "numFailed": 0
+        },
+        "rootID": "k012b3d48d24239d463725a7aad86c70b",
+        "retention": [
+          "latest-1",
+          "hourly-1",
+          "daily-1",
+          "weekly-1",
+          "monthly-1",
+          "annual-1"
+        ],
+        "pins": []
+      }
+    ],
+    "unfilteredCount": 1,
+    "uniqueCount": 1
+  }
+}

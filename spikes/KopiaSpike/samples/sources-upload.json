@@ -1,0 +1,16 @@
+{
+  "client": "ui",
+  "method": "POST",
+  "path": "/api/v1/sources/upload?userName=cashgear&host=spike-host&path=<workspace>%5Csource-%C3%9Cn%C3%AF",
+  "request": {},
+  "status": 200,
+  "contentType": "application/json",
+  "elapsedMs": 0,
+  "response": {
+    "sources": {
+      "cashgear@spike-host:<workspace>\\source-Ünï": {
+        "success": true
+      }
+    }
+  }
+}
