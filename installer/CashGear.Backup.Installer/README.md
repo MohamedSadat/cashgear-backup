@@ -56,5 +56,8 @@ that list must name this certificate.
 - **Production configuration**: `Agent:LicenceServerUrl`, `LicencePublicKeys`, `UpdateManifestUrl`,
   `UpdatePublicKeys` and `UpdatePublisherThumbprints` in the agent's `appsettings.json` are empty, so licences
   cannot be activated (Free edition) and no updates are checked.
-- **Go module notices** for `kopia.exe` are still missing from `THIRD-PARTY-NOTICES.txt`
-  (`tools\notices\update-notices.ps1` lists the .NET side).
+- **Kopia's embedded web UI**: `kopia.exe` contains Kopia's compiled HTML UI (Go module
+  `github.com/kopia/htmluibuild`, built from https://github.com/kopia/htmlui). CashGear never serves it (the server
+  starts with a stub `--html` folder), but it ships inside the binary, and the npm packages bundled into it (React,
+  Bootstrap, Font Awesome and others) are not in `THIRD-PARTY-NOTICES.txt`: the bundle carries no licence comments,
+  so they would have to be collected from the `kopia/htmlui` sources it was built from.
