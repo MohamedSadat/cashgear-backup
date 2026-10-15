@@ -27,7 +27,9 @@ internal sealed class BackupAgentService(
     SettingsStore settings,
     AlertService alerts,
     IEmailSender email,
-    Licensing.LicenceService licences) : Proto.BackupAgent.BackupAgentBase
+    Licensing.LicenceService licences,
+    Updates.UpdateService updates,
+    Support.SupportBundleService support) : Proto.BackupAgent.BackupAgentBase
 {
     public override Task<Proto.AgentStatus> GetStatus(Proto.GetStatusRequest request, ServerCallContext context)
     {
@@ -260,6 +262,26 @@ internal sealed class BackupAgentService(
     {
         auth.Require(context, AccessLevel.Manage);
         return ProtoMapping.ToProto(await licences.RemoveAsync(context.CancellationToken));
+    }
+
+    public override Task<Proto.UpdateStatus> GetUpdateStatus(Proto.GetUpdateStatusRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Read);
+        return Task.FromResult(ProtoMapping.ToProto(updates.Get()));
+    }
+
+    public override async Task<Proto.UpdateStatus> CheckForUpdates(Proto.CheckForUpdatesRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Operate);
+        return ProtoMapping.ToProto(await updates.CheckNowAsync(context.CancellationToken));
+    }
+
+    /// <summary>Manage: the bundle names the backed-up folders and destinations.</summary>
+    public override async Task<Proto.SupportBundle> CreateSupportBundle(Proto.CreateSupportBundleRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Manage);
+        var (fileName, content) = await support.CreateAsync(context.CancellationToken);
+        return new Proto.SupportBundle { FileName = fileName, Content = Google.Protobuf.ByteString.CopyFrom(content) };
     }
 
     private async Task<(IBackupEngine Engine, SnapshotInfo Snapshot)> SnapshotAsync(string jobId, string snapshotId, CancellationToken ct)

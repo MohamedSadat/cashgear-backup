@@ -22,6 +22,7 @@ internal sealed partial class Housekeeping(
     AlertService alerts,
     IEmailSender email,
     Licensing.LicenceService licences,
+    Updates.UpdateService updates,
     TimeProvider time,
     ILogger<Housekeeping> logger) : BackgroundService
 {
@@ -37,6 +38,9 @@ internal sealed partial class Housekeeping(
             await licences.RefreshIfDueAsync(ct);
             await StartDueChecksAsync(current, ct);
             await EmailNewAlertsAsync(current, ct);
+
+            // Last: an update installs only once nothing runs, so the checks started above go first.
+            await updates.RunIfDueAsync(ct);
         }
         finally
         {

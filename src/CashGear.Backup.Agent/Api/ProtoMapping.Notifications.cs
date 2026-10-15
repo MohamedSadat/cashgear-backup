@@ -49,6 +49,31 @@ internal static partial class ProtoMapping
         return proto;
     }
 
+    public static Proto.UpdateStatus ToProto(Updates.UpdateInfo update)
+    {
+        var proto = new Proto.UpdateStatus
+        {
+            CurrentVersion = update.CurrentVersion.Split('+')[0],
+            AvailableVersion = update.AvailableVersion ?? "",
+            State = update.Stage switch
+            {
+                Updates.UpdateStage.UpToDate => Proto.UpdateState.UpToDate,
+                Updates.UpdateStage.Downloading => Proto.UpdateState.Downloading,
+                Updates.UpdateStage.Ready => Proto.UpdateState.Ready,
+                Updates.UpdateStage.Installing => Proto.UpdateState.Installing,
+                Updates.UpdateStage.Failed => Proto.UpdateState.Failed,
+                _ => Proto.UpdateState.NotConfigured,
+            },
+            Message = update.Message,
+        };
+        if (update.LastCheckedAt is { } checkedAt)
+        {
+            proto.LastCheckedAt = Timestamp.FromDateTimeOffset(checkedAt);
+        }
+
+        return proto;
+    }
+
     public static Proto.Alert ToProto(AlertInfo alert) => new()
     {
         Id = alert.Id,

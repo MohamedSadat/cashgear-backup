@@ -22,7 +22,8 @@ namespace CashGear.Backup.Agent;
 /// <summary>Builds the agent: gRPC on a named pipe only (no TCP port), state.db, scheduler, engine, logging.</summary>
 public static class AgentHost
 {
-    public static WebApplication Build(string[] args, Action<AgentOptions>? configure = null)
+    /// <param name="services">Replaces services after the agent's own (tests: fake update installers and feeds).</param>
+    public static WebApplication Build(string[] args, Action<AgentOptions>? configure = null, Action<IServiceCollection>? services = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -70,12 +71,18 @@ public static class AgentHost
         builder.Services.AddSingleton<DestinationService>();
         builder.Services.AddSingleton<Licensing.ILicenceServer, Licensing.HttpLicenceServer>();
         builder.Services.AddSingleton<Licensing.LicenceService>();
+        builder.Services.AddSingleton<Updates.IUpdateFeed, Updates.HttpUpdateFeed>();
+        builder.Services.AddSingleton<Updates.IPackageVerifier, Updates.AuthenticodeVerifier>();
+        builder.Services.AddSingleton<Updates.IUpdateInstaller, Updates.MsiexecInstaller>();
+        builder.Services.AddSingleton<Updates.UpdateService>();
+        builder.Services.AddSingleton<Support.SupportBundleService>();
         builder.Services.AddSingleton<SettingsStore>();
         builder.Services.AddSingleton<AlertService>();
         builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
         builder.Services.AddSingleton<Housekeeping>();
         builder.Services.AddHostedService<AgentLifecycle>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<Housekeeping>());
+        services?.Invoke(builder.Services);
 
         var app = builder.Build();
         app.MapGrpcService<BackupAgentService>();

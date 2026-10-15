@@ -9,6 +9,7 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using DestinationKind = CashGear.Backup.Contracts.V1.DestinationKind;
 
 namespace CashGear.Backup.Agent.Tests.Infrastructure;
@@ -22,6 +23,7 @@ internal sealed class AgentHarness : IAsyncDisposable
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(2);
 
     private readonly Action<AgentOptions>? _configure;
+    private Action<IServiceCollection>? _services;
     private WebApplication? _app;
     private GrpcChannel? _channel;
 
@@ -49,9 +51,9 @@ internal sealed class AgentHarness : IAsyncDisposable
 
     public static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public static async Task<AgentHarness> StartAsync(string name, Action<AgentOptions>? configure = null)
+    public static async Task<AgentHarness> StartAsync(string name, Action<AgentOptions>? configure = null, Action<IServiceCollection>? services = null)
     {
-        var harness = new AgentHarness(name, configure);
+        var harness = new AgentHarness(name, configure) { _services = services };
         try
         {
             await harness.StartAgentAsync();
@@ -75,7 +77,7 @@ internal sealed class AgentHarness : IAsyncDisposable
             options.WriteToConsole = false;
             options.LicenceEnforcement = false;
             _configure?.Invoke(options);
-        });
+        }, _services);
         await _app.StartAsync(Ct);
         _channel = AgentChannel.Create(PipeName);
         Client = new BackupAgent.BackupAgentClient(_channel);

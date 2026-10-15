@@ -33,6 +33,62 @@ internal sealed partial class RunCoordinator(
     private readonly ConcurrentDictionary<Guid, Guid> _activeVerifies = new();
     private readonly CancellationTokenSource _stopping = new();
 
+    // Updates install only while nothing runs: starts in progress are counted, and maintenance stops new ones.
+    private readonly Lock _gate = new();
+    private int _starting;
+    private bool _maintenance;
+
+    public const string MaintenanceMessage = "CashGear Backup is installing an update. Try again in a few minutes.";
+
+    /// <summary>When nothing runs or is starting, stops new runs (an update installs) and returns true.</summary>
+    public bool TryBeginMaintenance()
+    {
+        lock (_gate)
+        {
+            if (_maintenance || _starting > 0 || !_active.IsEmpty || !_activeJobs.IsEmpty || !_activeVerifies.IsEmpty)
+            {
+                return false;
+            }
+
+            _maintenance = true;
+            return true;
+        }
+    }
+
+    public void EndMaintenance()
+    {
+        lock (_gate)
+        {
+            _maintenance = false;
+        }
+    }
+
+    private StartScope EnterStart()
+    {
+        lock (_gate)
+        {
+            if (_maintenance)
+            {
+                throw new AgentException(AgentError.FailedPrecondition, MaintenanceMessage);
+            }
+
+            _starting++;
+        }
+
+        return new StartScope(this);
+    }
+
+    private readonly struct StartScope(RunCoordinator owner) : IDisposable
+    {
+        public void Dispose()
+        {
+            lock (owner._gate)
+            {
+                owner._starting--;
+            }
+        }
+    }
+
     /// <summary>A backup of the job, or a restore into its folder, is running.</summary>
     public bool IsBackupRunning(Guid jobId) => _activeJobs.ContainsKey(jobId);
 
@@ -63,6 +119,7 @@ internal sealed partial class RunCoordinator(
 
     public async Task<RunRecord> StartBackupAsync(Guid jobId, RunTrigger trigger, CancellationToken ct)
     {
+        using var starting = EnterStart();
         JobRecord job;
         DestinationRecord destination;
         await using (var db = await dbs.CreateDbContextAsync(ct))
@@ -116,6 +173,7 @@ internal sealed partial class RunCoordinator(
     /// </summary>
     public async Task<RunRecord> StartRestoreAsync(Guid jobId, string snapshotId, string pathInSnapshot, string targetFolder, bool toOriginal, CancellationToken ct)
     {
+        using var starting = EnterStart();
         var (job, destination) = await LoadJobAsync(jobId, ct);
         var engine = await engines.ConnectAsync(destination, ct);
         var engineJob = JobMapping.ToEngineJob(job);
@@ -245,6 +303,7 @@ internal sealed partial class RunCoordinator(
     /// </summary>
     public async Task<RunRecord> StartVerifyAsync(Guid jobId, RunTrigger trigger, double sampleFraction, CancellationToken ct)
     {
+        using var starting = EnterStart();
         var (job, destination) = await LoadJobAsync(jobId, ct);
         var run = new RunRecord { Id = Guid.NewGuid(), JobId = jobId, Kind = RunKind.Verify, State = RunState.Running, Trigger = trigger, StartedAt = time.GetUtcNow() };
         if (!_activeVerifies.TryAdd(jobId, run.Id))
