@@ -1,0 +1,65 @@
+@page "/about"
+@implements IDisposable
+@inject IDesktopShell Shell
+@inject AgentMonitor Monitor
+
+@* Versions and the open-source notices shipped with the app (THIRD-PARTY-NOTICES.txt, installed beside it). *@
+
+<div class="page-head">
+    <h1>About CashGear Backup</h1>
+</div>
+
+<section class="wizard-step">
+    <p id="about-versions">
+        App version @Shell.AppVersion.
+        @if (Monitor.Status is { } status)
+        {
+            <span>Backup service version @status.AgentVersion.</span>
+        }
+    </p>
+    <p class="hint">CashGear Backup is built on open-source software. Their licences and notices follow.</p>
+</section>
+
+<section class="wizard-step">
+    <h2>Open-source notices</h2>
+    @if (_notices is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else if (_notices.Length == 0)
+    {
+        <p id="notices-missing" class="muted">The notices file is missing from this installation. Reinstall CashGear Backup to restore it.</p>
+    }
+    else
+    {
+        <pre id="notices" class="notices">@_notices</pre>
+    }
+</section>
+
+<a class="button" href="settings">Back to settings</a>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private string? _notices;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _notices = await Shell.ReadThirdPartyNoticesAsync(_cts.Token);
+        }
+        catch (IOException)
+        {
+            _notices = "";
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

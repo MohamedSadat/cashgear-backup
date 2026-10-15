@@ -94,4 +94,5 @@ public static class AgentErrorKinds
     public const string RestoreTargetNotEmpty = nameof(RestoreTargetNotEmpty);
     public const string RunAlreadyActive = nameof(RunAlreadyActive);
     public const string EngineUnavailable = nameof(EngineUnavailable);
+    public const string LicenceRequired = nameof(LicenceRequired);
 }

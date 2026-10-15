@@ -82,6 +82,12 @@ internal sealed class FakeShell : IDesktopShell
 
     public void OpenFolder(string path) => Opened.Add(path);
 
+    public string AppVersion => "1.2.3";
+
+    public string Notices { get; set; } = "Example Library" + Environment.NewLine + "Licensed under the Apache License, Version 2.0";
+
+    public Task<string> ReadThirdPartyNoticesAsync(CancellationToken ct) => Task.FromResult(Notices);
+
     public Task<string?> SaveFileAsync(string suggestedName, byte[] content, CancellationToken ct)
     {
         if (SaveAnswer is not null)

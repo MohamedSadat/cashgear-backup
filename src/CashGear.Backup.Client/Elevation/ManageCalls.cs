@@ -13,6 +13,9 @@ public static class ManageCalls
     public const string StartRestore = nameof(StartRestore);
     public const string UpdateSettings = nameof(UpdateSettings);
     public const string SendTestEmail = nameof(SendTestEmail);
+    public const string ActivateLicence = nameof(ActivateLicence);
+    public const string RemoveLicence = nameof(RemoveLicence);
+    public const string CreateSupportBundle = nameof(CreateSupportBundle);
 }
 
 /// <summary>Makes Manage calls on a connection that may make them: the elevated helper's.</summary>

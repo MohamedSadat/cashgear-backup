@@ -66,4 +66,21 @@ public interface IAgentClient
 
     /// <summary>Manage. An empty password uses the saved one.</summary>
     Task SendTestEmailAsync(EmailSettings email, CancellationToken ct);
+
+    /// <summary>The edition in force and what it allows.</summary>
+    Task<LicenceStatus> GetLicenceAsync(CancellationToken ct);
+
+    /// <summary>Manage. Activates a licence key with the licence server.</summary>
+    Task<LicenceStatus> ActivateLicenceAsync(string key, CancellationToken ct);
+
+    /// <summary>Manage. Back to the Free edition on this PC.</summary>
+    Task<LicenceStatus> RemoveLicenceAsync(CancellationToken ct);
+
+    Task<UpdateStatus> GetUpdateStatusAsync(CancellationToken ct);
+
+    /// <summary>Checks the update feed now (a newer version downloads and installs once no run is active).</summary>
+    Task<UpdateStatus> CheckForUpdatesAsync(CancellationToken ct);
+
+    /// <summary>Manage. A zip of the agent's logs and settings for support, without passwords or keys.</summary>
+    Task<SupportBundle> CreateSupportBundleAsync(CancellationToken ct);
 }

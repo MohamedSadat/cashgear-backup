@@ -10,6 +10,15 @@
     <a class="button primary" href="jobs/new">Add a backup</a>
 </div>
 
+@if (_licence is { State: LicenceState.OfflineGrace or LicenceState.Lapsed } licence)
+{
+    <div id="licence-banner" class="alert alert-@(licence.State == LicenceState.Lapsed ? "error" : "warn")" role="status">
+        <strong>Licence</strong>
+        <span>@licence.Message</span>
+        <a href="settings">Licence settings</a>
+    </div>
+}
+
 @if (_alerts.Count > 0)
 {
     <section id="alerts" class="alerts" aria-label="Needs your attention">
@@ -76,6 +85,7 @@ else
     private readonly HashSet<string> _watching = [];
     private Dictionary<string, Destination> _destinations = [];
     private IReadOnlyList<Alert> _alerts = [];
+    private LicenceStatus? _licence;
     private List<Job>? _jobs;
     private bool _connectionProblem;
     private string? _error;
@@ -147,6 +157,7 @@ else
             }
 
             _alerts = await Agent.ListAlertsAsync(ct);
+            _licence = await Agent.GetLicenceAsync(ct);
             _jobs = [.. jobs];
             _destinations = destinations.ToDictionary(d => d.Id);
             _connectionProblem = false;

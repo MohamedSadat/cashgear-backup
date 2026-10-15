@@ -23,6 +23,14 @@ else if (_draft is null)
 {
     <p class="muted">Loading…</p>
 }
+else if (_jobLimitReached)
+{
+    <section id="free-limit" class="wizard-step">
+        <h2>The Free edition backs up one folder</h2>
+        <p>To back up more folders, activate a Pro licence in <a href="settings">Settings</a>. Your existing backup keeps running.</p>
+        <a class="button" href="">Back to backups</a>
+    </section>
+}
 else if (_newDestination is not null && _jobCreated)
 {
     <section id="recovery-kit-panel" class="wizard-step">
@@ -128,13 +136,17 @@ else
                             A network share (NAS) with its own account
                         </label>
                         <label class="choice">
-                            <input type="radio" id="dest-type-sftp" name="destination-type" checked="@(_draft.DestinationType == DestinationType.Sftp)" @onchange="() => _draft.DestinationType = DestinationType.Sftp" />
+                            <input type="radio" id="dest-type-sftp" name="destination-type" disabled="@(!CloudAllowed)" checked="@(_draft.DestinationType == DestinationType.Sftp)" @onchange="() => _draft.DestinationType = DestinationType.Sftp" />
                             An SFTP server
                         </label>
                         <label class="choice">
-                            <input type="radio" id="dest-type-s3" name="destination-type" checked="@(_draft.DestinationType == DestinationType.S3)" @onchange="() => _draft.DestinationType = DestinationType.S3" />
+                            <input type="radio" id="dest-type-s3" name="destination-type" disabled="@(!CloudAllowed)" checked="@(_draft.DestinationType == DestinationType.S3)" @onchange="() => _draft.DestinationType = DestinationType.S3" />
                             S3-compatible cloud storage (Amazon S3, Backblaze B2, Wasabi and others)
                         </label>
+                        @if (!CloudAllowed)
+                        {
+                            <p id="cloud-needs-pro" class="hint">SFTP and cloud storage need a Pro licence (<a href="settings">Settings</a>).</p>
+                        }
                     </fieldset>
                     @switch (_draft.DestinationType)
                     {
@@ -455,6 +467,11 @@ else
     private string? _kitSaved;
     private bool _checkingServer;
     private string? _probeError;
+    private LicenceStatus? _licence;
+    private bool _jobLimitReached;
+
+    /// <summary>Unknown (the agent did not say) counts as allowed: the agent checks again anyway.</summary>
+    private bool CloudAllowed => _licence?.CloudDestinations ?? true;
 
     /// <summary>Set when changing an existing job.</summary>
     [Parameter]
@@ -496,8 +513,10 @@ else
         try
         {
             _destinations = [.. await Agent.ListDestinationsAsync(_cts.Token)];
+            _licence = await Agent.GetLicenceAsync(_cts.Token);
             if (JobId is null)
             {
+                _jobLimitReached = _licence.MaxJobs > 0 && (await Agent.ListJobsAsync(_cts.Token)).Count >= _licence.MaxJobs;
                 _draft = JobDraft.ForNew(_destinations);
                 return;
             }

@@ -57,6 +57,13 @@ public class ElevationTests
         Assert.Equal("", saved.Email.Password);
         Assert.Equal(1, launcher.Launches);
 
+        // Licence and support calls too.
+        var licence = await session.InvokeAsync(ManageCalls.RemoveLicence, new RemoveLicenceRequest(), LicenceStatus.Parser, Ct);
+        Assert.True(licence.BackupsAllowed);
+        var bundle = await session.InvokeAsync(ManageCalls.CreateSupportBundle, new CreateSupportBundleRequest(), SupportBundle.Parser, Ct);
+        Assert.False(bundle.Content.IsEmpty);
+        Assert.Equal(1, launcher.Launches);
+
         // Closing the session ends the helper.
         await session.DisposeAsync();
         Assert.Equal(ElevatedHelper.ExitOk, await launcher.Helper!.WaitAsync(TimeSpan.FromSeconds(30), Ct));

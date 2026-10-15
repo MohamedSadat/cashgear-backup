@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using CashGear.Backup.UI.Components.Services;
@@ -51,6 +52,15 @@ internal sealed partial class WpfFolderPicker : IFolderPicker
 
 internal sealed class DesktopShell : IDesktopShell
 {
+    public string AppVersion { get; } =
+        typeof(DesktopShell).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
+
+    public async Task<string> ReadThirdPartyNoticesAsync(CancellationToken ct)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt");
+        return File.Exists(path) ? await File.ReadAllTextAsync(path, ct) : "";
+    }
+
     public string DefaultRestoreParent { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Restored");
 

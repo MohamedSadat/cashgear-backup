@@ -194,6 +194,58 @@ internal sealed class FakeAgentClient : IAgentClient
         return 0;
     });
 
+    public LicenceStatus Licence { get; set; } = new()
+    {
+        Edition = Edition.Pro, State = LicenceState.Active, KeyHint = "ABCD", CloudDestinations = true, EmailAlerts = true, BackupsAllowed = true,
+    };
+
+    /// <summary>Keys <see cref="ActivateLicenceAsync"/> accepts (as Pro); others fail with InvalidArgument.</summary>
+    public HashSet<string> ValidKeys { get; } = ["CGB-GOOD-1234"];
+
+    public UpdateStatus Update { get; set; } = new() { CurrentVersion = "1.0.0", State = UpdateState.UpToDate };
+
+    public Func<UpdateStatus> OnCheckForUpdates { get; set; } = () => new UpdateStatus { CurrentVersion = "1.0.0", State = UpdateState.UpToDate };
+
+    public SupportBundle Bundle { get; set; } = new() { FileName = "cashgear-support.zip", Content = Google.Protobuf.ByteString.CopyFrom(1, 2, 3) };
+
+    public Task<LicenceStatus> GetLicenceAsync(CancellationToken ct) => Respond("GetLicence", () => Licence.Clone());
+
+    public Task<LicenceStatus> ActivateLicenceAsync(string key, CancellationToken ct) => Respond("ActivateLicence", () =>
+    {
+        if (!ValidKeys.Contains(key))
+        {
+            throw new AgentCallException(Grpc.Core.StatusCode.InvalidArgument, AgentErrorKinds.InvalidArgument, "The licence server did not accept the key: This key does not exist.");
+        }
+
+        Licence = new LicenceStatus
+        {
+            Edition = Edition.Pro, State = LicenceState.Active, KeyHint = key[^4..], CloudDestinations = true, EmailAlerts = true, BackupsAllowed = true,
+            LastCheckedAt = Timestamp.FromDateTimeOffset(Sample.Now),
+        };
+        return Licence.Clone();
+    });
+
+    public Task<LicenceStatus> RemoveLicenceAsync(CancellationToken ct) => Respond("RemoveLicence", () =>
+    {
+        Licence = FreeLicence();
+        return Licence.Clone();
+    });
+
+    public Task<UpdateStatus> GetUpdateStatusAsync(CancellationToken ct) => Respond("GetUpdateStatus", () => Update.Clone());
+
+    public Task<UpdateStatus> CheckForUpdatesAsync(CancellationToken ct) => Respond("CheckForUpdates", () =>
+    {
+        Update = OnCheckForUpdates();
+        return Update.Clone();
+    });
+
+    public Task<SupportBundle> CreateSupportBundleAsync(CancellationToken ct) => Respond("CreateSupportBundle", () => Bundle.Clone());
+
+    public static LicenceStatus FreeLicence() => new()
+    {
+        Edition = Edition.Free, State = LicenceState.Free, MaxJobs = 1, BackupsAllowed = true,
+    };
+
     private Channel<RunProgress> Watch(string runId) => _watches.GetOrAdd(runId, _ => Channel.CreateUnbounded<RunProgress>());
 
     private Task<T> Respond<T>(string call, Func<T> result)

@@ -173,6 +173,33 @@ public sealed class AgentClient : IAgentClient, IDisposable
         return ManageAsync(ManageCalls.SendTestEmail, request, SendTestEmailResponse.Parser, o => _agent.SendTestEmailAsync(request, o), ct);
     }
 
+    public Task<LicenceStatus> GetLicenceAsync(CancellationToken ct) =>
+        CallAsync(o => _agent.GetLicenceAsync(new GetLicenceRequest(), o), ct);
+
+    public Task<LicenceStatus> ActivateLicenceAsync(string key, CancellationToken ct)
+    {
+        var request = new ActivateLicenceRequest { Key = key };
+        return ManageAsync(ManageCalls.ActivateLicence, request, LicenceStatus.Parser, o => _agent.ActivateLicenceAsync(request, o), ct);
+    }
+
+    public Task<LicenceStatus> RemoveLicenceAsync(CancellationToken ct)
+    {
+        var request = new RemoveLicenceRequest();
+        return ManageAsync(ManageCalls.RemoveLicence, request, LicenceStatus.Parser, o => _agent.RemoveLicenceAsync(request, o), ct);
+    }
+
+    public Task<UpdateStatus> GetUpdateStatusAsync(CancellationToken ct) =>
+        CallAsync(o => _agent.GetUpdateStatusAsync(new GetUpdateStatusRequest(), o), ct);
+
+    public Task<UpdateStatus> CheckForUpdatesAsync(CancellationToken ct) =>
+        CallAsync(o => _agent.CheckForUpdatesAsync(new CheckForUpdatesRequest(), o), ct);
+
+    public Task<SupportBundle> CreateSupportBundleAsync(CancellationToken ct)
+    {
+        var request = new CreateSupportBundleRequest();
+        return ManageAsync(ManageCalls.CreateSupportBundle, request, SupportBundle.Parser, o => _agent.CreateSupportBundleAsync(request, o), ct);
+    }
+
     public void Dispose() => _channel.Dispose();
 
     private async Task<T> ManageAsync<T>(string method, IMessage request, MessageParser<T> parser, Func<CallOptions, AsyncUnaryCall<T>> direct, CancellationToken ct)

@@ -183,3 +183,4 @@ td p { margin: 0 0 4px; }
 .wizard-step + .wizard-step, .wizard-step + .elevation-note { margin-top: 14px; }
 .kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
 .kit-row > span:first-child { flex: 1; }
+.notices { white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px; max-height: 60vh; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }

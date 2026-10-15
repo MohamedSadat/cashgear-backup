@@ -108,6 +108,9 @@ public static class ElevatedHelper
                 ManageCalls.StartRestore => await agent.StartRestoreAsync(StartRestoreRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 ManageCalls.UpdateSettings => await agent.UpdateSettingsAsync(UpdateSettingsRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 ManageCalls.SendTestEmail => await agent.SendTestEmailAsync(SendTestEmailRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
+                ManageCalls.ActivateLicence => await agent.ActivateLicenceAsync(ActivateLicenceRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
+                ManageCalls.RemoveLicence => await agent.RemoveLicenceAsync(RemoveLicenceRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
+                ManageCalls.CreateSupportBundle => await agent.CreateSupportBundleAsync(CreateSupportBundleRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 _ => throw new AgentCallException(StatusCode.Unimplemented, AgentErrorKinds.InvalidArgument, "The administrator helper only makes setup and restore calls."),
             };
             return new ElevatedReply { Response = response.ToByteString() };

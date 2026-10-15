@@ -28,6 +28,8 @@ public static class ErrorText
                 "There is already a backup at that location. To use it, choose \"Use a backup made earlier\" and enter its password.",
             AgentErrorKinds.DestinationUnreachable =>
                 "The destination cannot be reached. Check that the drive is plugged in or the network share is available. " + ex.Message,
+            AgentErrorKinds.LicenceRequired =>
+                ex.Message + " Settings has the licence section.",
             _ => ex.Message,
         };
     }

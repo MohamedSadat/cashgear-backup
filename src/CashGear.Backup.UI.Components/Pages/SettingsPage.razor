@@ -5,14 +5,54 @@
 @inject IDesktopShell Shell
 @inject TimeProvider Time
 
-@* Alerts, checks of backups, email, and Recovery Kits. The email password is write-only: it is sent when typed and
-   never shown again. *@
+@* Licence, alerts, checks of backups, email, Recovery Kits, updates and support. The email password and the licence
+   key are write-only: sent when typed and never shown again. *@
 
 <div class="page-head">
     <h1>Settings</h1>
 </div>
 
 <ErrorBox Message="@_loadError" />
+
+@if (_licence is not null)
+{
+    <section id="licence" class="wizard-step">
+        <h2>Licence</h2>
+        <p id="licence-summary"><strong>@LicenceText.Edition(_licence)</strong>: @LicenceText.State(_licence)</p>
+        @if (!string.IsNullOrEmpty(_licence.Message))
+        {
+            <p id="licence-message" class="hint">@_licence.Message</p>
+        }
+        @if (_licence.Edition == Edition.Free)
+        {
+            <p class="hint">The Free edition backs up one folder to a disk or a network share. Pro adds more folders, SFTP and cloud storage, and email alerts.</p>
+        }
+        <div class="field inline">
+            <label for="licence-key">Licence key</label>
+            <input id="licence-key" type="text" autocomplete="off" spellcheck="false" value="@_licenceKey"
+                   @onchange="e => _licenceKey = e.Value?.ToString() ?? string.Empty" />
+            <button type="button" id="activate-licence" class="button" @onclick="ActivateAsync" disabled="@_busy">Activate</button>
+        </div>
+        @if (_licence.Edition != Edition.Free && !string.IsNullOrEmpty(_licence.KeyHint))
+        {
+            @if (_confirmRemove)
+            {
+                <div class="actions">
+                    <span class="hint">This PC goes back to the Free edition: only the first backup keeps running. Your backups stay where they are.</span>
+                    <button type="button" id="remove-licence-confirm" class="button danger" @onclick="RemoveLicenceAsync" disabled="@_busy">Remove the licence</button>
+                    <button type="button" id="remove-licence-cancel" class="button" @onclick="() => _confirmRemove = false">Keep it</button>
+                </div>
+            }
+            else
+            {
+                <div class="actions">
+                    <button type="button" id="remove-licence" class="button" @onclick="() => _confirmRemove = true">Remove the licence from this PC…</button>
+                </div>
+            }
+        }
+        <ErrorBox Message="@_licenceError" />
+    </section>
+}
 
 @if (_settings is not null)
 {
@@ -32,9 +72,13 @@
     <section class="wizard-step">
         <h2>Email</h2>
         <label class="choice">
-            <input type="checkbox" id="email-enabled" @bind="_settings.Email.Enabled" />
+            <input type="checkbox" id="email-enabled" @bind="_settings.Email.Enabled" disabled="@(!EmailAllowed && !_settings.Email.Enabled)" />
             Email me when a backup fails, a check finds a problem, or there has been no backup for too long
         </label>
+        @if (!EmailAllowed)
+        {
+            <p id="email-needs-pro" class="hint">Email alerts need a Pro licence.</p>
+        }
         <div class="field">
             <label for="smtp-host">Mail server</label>
             <input id="smtp-host" type="text" placeholder="smtp.example.com" @bind="_settings.Email.SmtpHost" />
@@ -117,11 +161,51 @@
     </section>
 }
 
+@if (_update is not null)
+{
+    <section id="updates" class="wizard-step">
+        <h2>Updates</h2>
+        <p id="update-status">@UpdateText.For(_update, Time)</p>
+        @if (_update.State != UpdateState.NotConfigured)
+        {
+            <div class="actions">
+                <button type="button" id="check-updates" class="button" @onclick="CheckForUpdatesAsync" disabled="@_busy">Check for updates</button>
+            </div>
+        }
+        <ErrorBox Message="@_updateError" />
+    </section>
+}
+
+<section id="support" class="wizard-step">
+    <h2>Help and support</h2>
+    <p>
+        A support file holds the backup service's recent logs and settings, without passwords or keys. Save one and send it
+        to support when they ask for it.
+    </p>
+    <div class="actions">
+        <button type="button" id="support-bundle" class="button" @onclick="SaveSupportBundleAsync" disabled="@_busy">Save a support file…</button>
+        @if (_bundleSaved is not null)
+        {
+            <span id="support-bundle-saved" class="hint">Saved to @_bundleSaved</span>
+        }
+    </div>
+    <ErrorBox Message="@_supportError" />
+    <p><a id="about-link" href="about">About CashGear Backup and open-source notices</a></p>
+</section>
+
 @code {
     private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<string, string> _kitSaved = [];
     private Settings? _settings;
+    private LicenceStatus? _licence;
+    private UpdateStatus? _update;
     private IReadOnlyList<Destination> _destinations = [];
+    private string _licenceKey = "";
+    private bool _confirmRemove;
+    private string? _licenceError;
+    private string? _updateError;
+    private string? _supportError;
+    private string? _bundleSaved;
     private string _password = "";
     private bool _clearPassword;
     private string? _loadError;
@@ -137,6 +221,8 @@
             _settings = await Agent.GetSettingsAsync(_cts.Token);
             _settings.Email ??= new EmailSettings();
             _destinations = await Agent.ListDestinationsAsync(_cts.Token);
+            _licence = await Agent.GetLicenceAsync(_cts.Token);
+            _update = await Agent.GetUpdateStatusAsync(_cts.Token);
         }
         catch (AgentCallException ex)
         {
@@ -172,6 +258,104 @@
             // The password is not kept on the page, whether or not the agent took it.
             _password = "";
             _clearPassword = false;
+            _busy = false;
+        }
+    }
+
+    /// <summary>Unknown counts as allowed: the agent checks again anyway.</summary>
+    private bool EmailAllowed => _licence?.EmailAlerts ?? true;
+
+    private async Task ActivateAsync()
+    {
+        _licenceError = null;
+        if (string.IsNullOrWhiteSpace(_licenceKey))
+        {
+            _licenceError = "Enter the licence key from your purchase email.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _licence = await Agent.ActivateLicenceAsync(_licenceKey.Trim(), _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _licenceError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            // The key is not kept on the page, whether or not it was accepted.
+            _licenceKey = "";
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveLicenceAsync()
+    {
+        _busy = true;
+        _licenceError = null;
+        try
+        {
+            _licence = await Agent.RemoveLicenceAsync(_cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _licenceError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _confirmRemove = false;
+            _busy = false;
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        _busy = true;
+        _updateError = null;
+        try
+        {
+            _update = await Agent.CheckForUpdatesAsync(_cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _updateError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveSupportBundleAsync()
+    {
+        _busy = true;
+        _supportError = null;
+        _bundleSaved = null;
+        try
+        {
+            var bundle = await Agent.CreateSupportBundleAsync(_cts.Token);
+            _bundleSaved = await Shell.SaveFileAsync(bundle.FileName, bundle.Content.ToByteArray(), _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _supportError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
             _busy = false;
         }
     }
@@ -216,6 +400,7 @@
     public void Dispose()
     {
         _password = "";
+        _licenceKey = "";
         _cts.Cancel();
         _cts.Dispose();
     }
