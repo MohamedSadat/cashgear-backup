@@ -132,6 +132,15 @@ public class LicenceAndSupportTests : UiTest
     }
 
     [Fact]
+    public void Before_the_first_check_it_does_not_claim_to_be_the_latest()
+    {
+        Agent.Update = new UpdateStatus { CurrentVersion = "1.0.0", State = UpdateState.UpToDate };
+        var cut = Render<SettingsPage>();
+
+        cut.WaitForAssertion(() => Assert.Contains("not checked for updates yet", cut.Find("#update-status").TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Without_an_update_source_there_is_nothing_to_check()
     {
         Agent.Update = new UpdateStatus { CurrentVersion = "1.0.0", State = UpdateState.NotConfigured };

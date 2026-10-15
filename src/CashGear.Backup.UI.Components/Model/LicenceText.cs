@@ -40,6 +40,7 @@ public static class UpdateText
         return update.State switch
         {
             UpdateState.NotConfigured => $"This is version {update.CurrentVersion}. Automatic updates are not set up on this installation.",
+            UpdateState.UpToDate when update.LastCheckedAt is null => $"This is version {update.CurrentVersion}. It has not checked for updates yet.",
             UpdateState.UpToDate => $"Version {update.CurrentVersion} is the latest.{checkedAt}",
             UpdateState.Downloading => $"Version {update.AvailableVersion} is downloading.",
             UpdateState.Ready => $"Version {update.AvailableVersion} is ready. It installs as soon as no backup or restore is running.",

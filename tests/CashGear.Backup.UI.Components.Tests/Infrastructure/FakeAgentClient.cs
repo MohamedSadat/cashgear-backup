@@ -202,9 +202,10 @@ internal sealed class FakeAgentClient : IAgentClient
     /// <summary>Keys <see cref="ActivateLicenceAsync"/> accepts (as Pro); others fail with InvalidArgument.</summary>
     public HashSet<string> ValidKeys { get; } = ["CGB-GOOD-1234"];
 
-    public UpdateStatus Update { get; set; } = new() { CurrentVersion = "1.0.0", State = UpdateState.UpToDate };
+    public UpdateStatus Update { get; set; } = new() { CurrentVersion = "1.0.0", State = UpdateState.UpToDate, LastCheckedAt = Timestamp.FromDateTimeOffset(Sample.Now) };
 
-    public Func<UpdateStatus> OnCheckForUpdates { get; set; } = () => new UpdateStatus { CurrentVersion = "1.0.0", State = UpdateState.UpToDate };
+    public Func<UpdateStatus> OnCheckForUpdates { get; set; } = () =>
+        new UpdateStatus { CurrentVersion = "1.0.0", State = UpdateState.UpToDate, LastCheckedAt = Timestamp.FromDateTimeOffset(Sample.Now) };
 
     public SupportBundle Bundle { get; set; } = new() { FileName = "cashgear-support.zip", Content = Google.Protobuf.ByteString.CopyFrom(1, 2, 3) };
 
