@@ -1,0 +1,52 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]64/
+[Ll]og/
+[Ll]ogs/
+*.binlog
+
+# IDE and user files
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+launchSettings.local.json
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Pinned Kopia binary: fetched by tools/kopia/fetch-kopia.ps1, never committed
+/tools/kopia/kopia.exe
+/tools/kopia/*.tmp
+
+# Local run output (spike HTTP captures, logs)
+/artifacts/
+
+# Kopia's plaintext password fallback must never be committed
+*.kopia-password

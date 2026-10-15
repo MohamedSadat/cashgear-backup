@@ -1,0 +1,18 @@
+* text=auto
+
+*.cs      text diff=csharp
+*.csproj  text
+*.slnx    text
+*.props   text
+*.targets text
+*.json    text
+*.md      text
+*.ps1     text eol=crlf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+
+*.exe     binary
+*.dll     binary
+*.zip     binary
+*.png     binary
+*.ico     binary

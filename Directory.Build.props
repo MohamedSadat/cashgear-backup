@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Company>CashGear</Company>
+    <Product>CashGear Backup</Product>
+    <Copyright>Copyright (c) CashGear</Copyright>
+    <CashGearRepoRoot>$(MSBuildThisFileDirectory)</CashGearRepoRoot>
+    <CashGearKopiaDir>$(MSBuildThisFileDirectory)tools\kopia\</CashGearKopiaDir>
+  </PropertyGroup>
+</Project>
