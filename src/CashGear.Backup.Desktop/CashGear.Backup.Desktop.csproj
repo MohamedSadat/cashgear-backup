@@ -4,7 +4,10 @@
        with "runas" and the elevated-helper switch, is the headless helper that makes Manage calls. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- A versioned Windows TFM: BlazorWebView's WebView2 composition control needs the Windows SDK projection
+         (Microsoft.Windows.SDK.NET), which plain net10.0-windows does not ship. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <StartupObject>CashGear.Backup.Desktop.Program</StartupObject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -165,6 +165,7 @@ td p { margin: 0 0 4px; }
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
 .crumbs .sep { color: var(--muted); }
 .entries { margin-bottom: 14px; }
+.entries th:first-child, .entries td:first-child { width: 36px; }
 .restore-panel { margin-top: 10px; }
 .result { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); }
 .result p { margin: 6px 0; }

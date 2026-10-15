@@ -130,8 +130,9 @@ else
         }
         catch (AgentCallException ex) when (ex.IsConnectionProblem)
         {
-            // The banner explains it; keep showing what we had.
+            // The banner explains it (tell the monitor now rather than at its next poll); keep showing what we had.
             _connectionProblem = true;
+            _ = Monitor.RefreshAsync(ct);
         }
         catch (AgentCallException ex)
         {
