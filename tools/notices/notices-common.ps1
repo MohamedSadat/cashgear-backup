@@ -44,11 +44,18 @@ function Get-SpdxIds([string]$Text) {
         @('ISC', 'permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted'),
         @('ISC', 'permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted'),
         @('CC0-1.0', 'cc0 1.0 universal'),
+        @('CC-BY-4.0', 'creative commons attribution 4.0 international public license'),
+        @('OFL-1.1', 'sil open font license version 1.1'),
         @('Unlicense', 'this is free and unencumbered software released into the public domain')
     )
     $found = foreach ($s in $signatures) {
         $i = $t.IndexOf($s[1], [StringComparison]::Ordinal)
-        if ($i -ge 0) { [pscustomobject]@{ Id = $s[0]; At = $i } }
+        if ($i -ge 0) {
+            $id = $s[0]
+            # 0BSD is the ISC grant without the condition that the notice appear in all copies.
+            if ($id -eq 'ISC' -and -not $t.Substring($i + $s[1].Length).StartsWith(', provided that', [StringComparison]::Ordinal)) { $id = '0BSD' }
+            [pscustomobject]@{ Id = $id; At = $i }
+        }
     }
     # A BSD text is 3-clause when the no-endorsement clause follows it before the next BSD text starts.
     $i = $t.IndexOf($bsd, [StringComparison]::Ordinal)
