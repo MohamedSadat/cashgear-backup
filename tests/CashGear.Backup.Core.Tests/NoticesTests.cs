@@ -8,7 +8,11 @@ namespace CashGear.Backup.Core.Tests;
 public class NoticesTests
 {
     private const string CollectCommand = @"tools\notices\collect-kopia-go-modules.ps1";
+    private const string CollectWebUiCommand = @"tools\notices\collect-kopia-webui-packages.ps1";
     private const string UpdateCommand = @"tools\notices\update-notices.ps1";
+    private const string GoTextsHeading = "5. Go module licence and notice files";
+    private const string WebUiHeading = "6. npm packages in Kopia's web UI";
+    private const string WebUiTextsHeading = "7. Web UI package licence and notice files";
     private static readonly string[] s_shippedProjects = ["CashGear.Backup.Agent", "CashGear.Backup.Desktop"];
 
     [Fact]
@@ -94,7 +98,7 @@ public class NoticesTests
     {
         var notices = File.ReadAllText(RepoPaths.Combine("THIRD-PARTY-NOTICES.txt")).ReplaceLineEndings("\n");
         var modules = Section(notices, "3. Go modules in kopia.exe", "4. Licence texts");
-        var texts = Section(notices, "5. Go module licence and notice files", null);
+        var texts = Section(notices, GoTextsHeading, WebUiHeading);
         using var data = ReadGoModuleData();
         var missing = new List<string>();
 
@@ -135,6 +139,81 @@ public class NoticesTests
             $"Not recorded: {string.Join(", ", built.Except(recorded))}. Not in kopia.exe: {string.Join(", ", recorded.Except(built))}.");
     }
 
+    [Fact]
+    public void Web_UI_package_data_was_collected_for_the_htmluibuild_in_kopia()
+    {
+        using var goData = ReadGoModuleData();
+        using var webData = ReadWebUiPackageData();
+        var recorded = webData.RootElement.GetProperty("htmluibuild");
+        var path = recorded.GetProperty("path").GetString();
+        var recordedVersion = recorded.GetProperty("version").GetString();
+        var module = goData.RootElement.GetProperty("modules").EnumerateArray()
+            .FirstOrDefault(m => m.GetProperty("path").GetString() == path);
+        var moduleVersion = module.ValueKind == JsonValueKind.Object ? module.GetProperty("version").GetString() : null;
+        Assert.True(
+            moduleVersion == recordedVersion
+                && module.GetProperty("sum").GetString() == recorded.GetProperty("sum").GetString(),
+            $"tools/notices/kopia-webui-packages.json was collected for {path} {recordedVersion}, but " +
+            $"tools/notices/kopia-go-modules.json has {moduleVersion ?? "no such module"}. Run {CollectWebUiCommand}, then {UpdateCommand}.");
+
+        var packages = WebUiPackages(webData).ToList();
+        Assert.True(packages.Count > 1, $"tools/notices/kopia-webui-packages.json lists no npm packages; run {CollectWebUiCommand}.");
+        var problems = new List<string>();
+        foreach (var (label, folder, package) in packages)
+        {
+            if (string.IsNullOrEmpty(package.GetProperty("license").GetString()))
+            {
+                problems.Add($"{label} has no licence");
+            }
+
+            var files = package.GetProperty("files").EnumerateArray().ToList();
+            if (!files.Any(f => !f.TryGetProperty("notice", out _)))
+            {
+                problems.Add($"{label} has no licence file");
+            }
+
+            var stored = files.Where(f => !f.TryGetProperty("standardApache", out _)).Select(f => $"{folder}/{f.GetProperty("path").GetString()}")
+                .Concat(SpdxIds(package).Select(id => $"spdx/{id}.txt"));
+            foreach (var file in stored)
+            {
+                var filePath = RepoPaths.Combine(["tools", "notices", "kopia-webui-licenses", .. file.Split('/')]);
+                if (!File.Exists(filePath))
+                {
+                    problems.Add($"{filePath} is missing");
+                }
+            }
+        }
+
+        Assert.True(problems.Count == 0, $"tools/notices/kopia-webui-packages.json is incomplete; run {CollectWebUiCommand}: " + string.Join("; ", problems));
+    }
+
+    [Fact]
+    public void Every_web_UI_package_in_kopia_is_in_the_notices()
+    {
+        var notices = File.ReadAllText(RepoPaths.Combine("THIRD-PARTY-NOTICES.txt")).ReplaceLineEndings("\n");
+        var list = Section(notices, WebUiHeading, WebUiTextsHeading);
+        var texts = Section(notices, WebUiTextsHeading, null);
+        using var webData = ReadWebUiPackageData();
+        var missing = new List<string>();
+
+        foreach (var (label, _, package) in WebUiPackages(webData))
+        {
+            if (!list.Contains($"\n{label}\n  Licence: {package.GetProperty("license").GetString()}\n", StringComparison.Ordinal))
+            {
+                missing.Add(label);
+            }
+
+            var fileLabels = package.GetProperty("files").EnumerateArray()
+                .Where(f => !f.TryGetProperty("standardApache", out _))
+                .Select(f => $"\n{label}: {f.GetProperty("path").GetString()}\n")
+                .Concat(SpdxIds(package).Select(id => $"\n{label}: {id} "));
+            missing.AddRange(fileLabels.Where(l => !texts.Contains(l, StringComparison.Ordinal)).Select(l => l.Trim()));
+        }
+
+        Assert.True(missing.Count == 0,
+            $"Sections 6 and 7 of THIRD-PARTY-NOTICES.txt are out of date; run {UpdateCommand}. Missing: " + string.Join(", ", missing));
+    }
+
     private static bool HasRuntimeFiles(JsonElement library) =>
         new[] { "runtime", "runtimeTargets", "native" }.Any(kind =>
             library.TryGetProperty(kind, out var files) && files.EnumerateObject().Any(f => !f.Name.EndsWith("_._", StringComparison.Ordinal)));
@@ -153,6 +232,24 @@ public class NoticesTests
             yield return ($"{path} {module.GetProperty("version").GetString()}", path, module);
         }
     }
+
+    private static JsonDocument ReadWebUiPackageData() =>
+        JsonDocument.Parse(File.ReadAllText(RepoPaths.Combine("tools", "notices", "kopia-webui-packages.json")));
+
+    /// <summary>Each npm package in Kopia's web UI: its label in the notices, its folder under kopia-webui-licenses, its data.</summary>
+    private static IEnumerable<(string Label, string Folder, JsonElement Package)> WebUiPackages(JsonDocument data)
+    {
+        foreach (var package in data.RootElement.GetProperty("packages").EnumerateArray())
+        {
+            var name = package.GetProperty("name").GetString();
+            var version = package.GetProperty("version").GetString();
+            yield return ($"{name} {version}", $"{name}@{version}", package);
+        }
+    }
+
+    /// <summary>Licences whose text came from the SPDX licence list because the package only links to them.</summary>
+    private static IEnumerable<string> SpdxIds(JsonElement package) =>
+        package.TryGetProperty("spdx", out var ids) ? ids.EnumerateArray().Select(id => id.GetString()!) : [];
 
     private static string Section(string notices, string heading, string? nextHeading)
     {
