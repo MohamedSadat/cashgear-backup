@@ -39,8 +39,26 @@ service BackupAgent {
 
   rpc ListSnapshots (ListSnapshotsRequest) returns (ListSnapshotsResponse);
   rpc BrowseSnapshot (BrowseSnapshotRequest) returns (BrowseSnapshotResponse);
-  // Manage. Restores into a new or empty folder; never overwrites.
+  // Finds files and folders whose name contains the query (any case) in one snapshot. Streams matches as the
+  // snapshot is walked; the last message has `done` set and says whether the search stopped at a limit.
+  rpc SearchSnapshot (SearchSnapshotRequest) returns (stream SearchSnapshotResponse);
+  // Manage. Restores into a new or empty folder, or back into the job's folder without replacing anything
+  // there (see RestoreLocation). Never overwrites.
   rpc StartRestore (StartRestoreRequest) returns (Run);
+
+  // Checks a job's backups now: the structure of every snapshot plus a sample of file contents read back from
+  // the destination (Settings.verify_sample_percent). Recorded as a run of kind VERIFY.
+  rpc VerifyJobNow (VerifyJobNowRequest) returns (Run);
+  // What needs the user's attention now: failed backups or checks, skipped files, no backup for too long.
+  rpc ListAlerts (ListAlertsRequest) returns (ListAlertsResponse);
+
+  // The email password is never returned.
+  rpc GetSettings (GetSettingsRequest) returns (Settings);
+  // Manage. Carries the email password: never log this message.
+  rpc UpdateSettings (UpdateSettingsRequest) returns (Settings);
+  // Manage. Sends a test email with the given settings (an empty password uses the saved one). Carries the
+  // email password: never log this message.
+  rpc SendTestEmail (SendTestEmailRequest) returns (SendTestEmailResponse);
 }
 
 message GetStatusRequest {}
@@ -196,6 +214,8 @@ enum RunKind {
   RUN_KIND_UNSPECIFIED = 0;
   RUN_KIND_BACKUP = 1;
   RUN_KIND_RESTORE = 2;
+  // A check of the job's backups: files = files read back, bytes = bytes read back, failed_items = problems found.
+  RUN_KIND_VERIFY = 3;
 }
 
 enum RunState {
@@ -331,11 +351,127 @@ message BrowseSnapshotResponse {
   repeated SnapshotEntry entries = 1;
 }
 
+enum RestoreLocation {
+  // Treated as NEW_FOLDER.
+  RESTORE_LOCATION_UNSPECIFIED = 0;
+  // Into target_folder, which must not exist yet or be empty.
+  RESTORE_LOCATION_NEW_FOLDER = 1;
+  // Back where the files came from, inside the job's folder. Nothing there is replaced: a file that is already
+  // there and differs is kept, and the restored copy is written next to it as "name (restored <date time>).ext";
+  // identical files are left as they are. Not while a backup of the job runs (and no backup starts meanwhile).
+  RESTORE_LOCATION_ORIGINAL = 2;
+}
+
 message StartRestoreRequest {
   string job_id = 1;
   string snapshot_id = 2;
   // Folder or file inside the snapshot; empty restores everything.
   string path = 3;
-  // Absolute path of a folder that does not exist yet or is empty.
+  // NEW_FOLDER: absolute path of a folder that does not exist yet or is empty. Ignored for ORIGINAL.
   string target_folder = 4;
+  RestoreLocation location = 5;
 }
+
+message SearchSnapshotRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Part of a file or folder name; any case. At least 2 characters.
+  string query = 3;
+  // 0 means 200; at most 1000.
+  int32 max_results = 4;
+}
+
+message SearchSnapshotResponse {
+  repeated SnapshotEntry matches = 1;
+  // Set on the last message.
+  bool done = 2;
+  // The search stopped at max_results or at the agent's limit on folders searched.
+  bool truncated = 3;
+  int64 folders_searched = 4;
+}
+
+message VerifyJobNowRequest {
+  string job_id = 1;
+}
+
+enum AlertKind {
+  ALERT_KIND_UNSPECIFIED = 0;
+  // No restore point for longer than Settings.alert_after_days (the PC was off, the destination unplugged...).
+  ALERT_KIND_NO_RECENT_BACKUP = 1;
+  // The job's latest backup failed.
+  ALERT_KIND_BACKUP_FAILED = 2;
+  // The job's latest backup recorded a restore point but could not read some files.
+  ALERT_KIND_BACKUP_SKIPPED_FILES = 3;
+  // The job's latest check found damaged or missing data, or could not run.
+  ALERT_KIND_VERIFY_FAILED = 4;
+}
+
+message Alert {
+  // Stable while the condition lasts; a new failure gets a new id.
+  string id = 1;
+  AlertKind kind = 2;
+  string job_id = 3;
+  string job_name = 4;
+  string message = 5;
+  google.protobuf.Timestamp since = 6;
+}
+
+message ListAlertsRequest {}
+
+message ListAlertsResponse {
+  // Most serious first.
+  repeated Alert alerts = 1;
+}
+
+enum SmtpSecurity {
+  // Treated as STARTTLS.
+  SMTP_SECURITY_UNSPECIFIED = 0;
+  // Plain connection upgraded with STARTTLS (usually port 587). Refused if the server cannot upgrade.
+  SMTP_SECURITY_STARTTLS = 1;
+  // TLS from the start (usually port 465).
+  SMTP_SECURITY_TLS = 2;
+  // No encryption: only without a username and password (a relay on the local network).
+  SMTP_SECURITY_NONE = 3;
+}
+
+message EmailSettings {
+  bool enabled = 1;
+  string smtp_host = 2;
+  // 0 means the usual port for the security mode.
+  int32 smtp_port = 3;
+  SmtpSecurity security = 4;
+  string username = 5;
+  // Write-only. Empty in an update keeps the saved password; GetSettings never returns it.
+  string password = 6;
+  // Read-only: a password is saved.
+  bool password_saved = 7;
+  // Set to clear the saved password.
+  bool clear_password = 8;
+  string from_address = 9;
+  // One or more addresses separated by commas or semicolons.
+  string to_addresses = 10;
+}
+
+message Settings {
+  // Alert when a job has no restore point for this many days. 1-60; 0 in an update means 3.
+  int32 alert_after_days = 1;
+  // Check each job's backups every this many days; 0 turns scheduled checks off. At most 90.
+  int32 verify_every_days = 2;
+  // Share of files read back in each check, in percent (0-100).
+  double verify_sample_percent = 3;
+  EmailSettings email = 4;
+}
+
+message GetSettingsRequest {}
+
+// Carries the email password: never log this message.
+message UpdateSettingsRequest {
+  Settings settings = 1;
+}
+
+// Carries the email password: never log this message.
+message SendTestEmailRequest {
+  EmailSettings email = 1;
+}
+
+message SendTestEmailResponse {}
