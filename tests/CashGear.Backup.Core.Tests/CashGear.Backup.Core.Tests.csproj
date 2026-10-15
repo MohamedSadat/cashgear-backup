@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
+    <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
   </ItemGroup>
 
   <ItemGroup>
