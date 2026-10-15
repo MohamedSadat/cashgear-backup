@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 5 chaos and scale suites. The agent runs as its own process (so a test can kill it), from its own
+       build output, against the pinned kopia.exe. The suites are explicit tests: the normal solution run skips
+       them; docs/hardening.md says how to run them. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- LibraryImport (Job Object P/Invoke) generates unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
+    <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
+    <Compile Include="..\Shared\TreeFixture.cs" Link="Shared\TreeFixture.cs" />
+    <Compile Include="..\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
+    <Compile Include="..\Shared\TestServers.cs" Link="Shared\TestServers.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CashGear.Backup.Contracts\CashGear.Backup.Contracts.csproj" />
+    <!-- Built first, then started as a separate process from its own output folder; not loaded into the tests. -->
+    <ProjectReference Include="..\..\src\CashGear.Backup.Agent\CashGear.Backup.Agent.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Tells the tests where the agent was built (AgentProcess.ExecutablePath). -->
+  <Target Name="StampAgentPath" BeforeTargets="GetAssemblyAttributes">
+    <MSBuild Projects="..\..\src\CashGear.Backup.Agent\CashGear.Backup.Agent.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_CashGearAgentAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <AssemblyMetadata Include="CashGear.AgentAssembly" Value="@(_CashGearAgentAssembly)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
