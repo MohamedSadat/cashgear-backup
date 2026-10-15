@@ -5,6 +5,14 @@ namespace CashGear.Backup.Data;
 public enum DestinationKind
 {
     FileSystem = 1,
+
+    /// <summary>A folder on an SMB share (\\server\share\folder) reached with its own account.</summary>
+    NetworkShare = 2,
+
+    Sftp = 3,
+
+    /// <summary>Amazon S3 or an S3-compatible service.</summary>
+    S3 = 4,
 }
 
 /// <summary>A repository the agent backs up to.</summary>
@@ -19,6 +27,15 @@ public sealed class DestinationRecord
 
     /// <summary>The repository password, DPAPI-protected. The plaintext is never stored.</summary>
     public required byte[] ProtectedPassword { get; set; }
+
+    /// <summary>
+    /// Connection settings that are not secret, as JSON: the share account, the SFTP server and its host keys, the
+    /// S3 endpoint, bucket and access key ID. Null for a plain folder.
+    /// </summary>
+    public string? Settings { get; set; }
+
+    /// <summary>The destination's own credential (share or SFTP password, SFTP private key, S3 secret key), DPAPI-protected.</summary>
+    public byte[]? ProtectedCredential { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 }

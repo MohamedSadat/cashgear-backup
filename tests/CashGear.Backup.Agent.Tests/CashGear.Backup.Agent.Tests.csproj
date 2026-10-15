@@ -11,6 +11,7 @@
     <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
     <Compile Include="..\Shared\TreeFixture.cs" Link="Shared\TreeFixture.cs" />
     <Compile Include="..\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
+    <Compile Include="..\Shared\TestServers.cs" Link="Shared\TestServers.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -15,7 +15,14 @@ internal static partial class ProtoMapping
     {
         Id = destination.Id.ToString(),
         Name = destination.Name,
-        Kind = destination.Kind == DestinationKind.FileSystem ? Proto.DestinationKind.FileSystem : Proto.DestinationKind.Unspecified,
+        Kind = destination.Kind switch
+        {
+            DestinationKind.FileSystem => Proto.DestinationKind.FileSystem,
+            DestinationKind.NetworkShare => Proto.DestinationKind.NetworkShare,
+            DestinationKind.Sftp => Proto.DestinationKind.Sftp,
+            DestinationKind.S3 => Proto.DestinationKind.S3,
+            _ => Proto.DestinationKind.Unspecified,
+        },
         Location = destination.Location,
         State = status.State switch
         {
@@ -30,8 +37,42 @@ internal static partial class ProtoMapping
     public static DestinationKind FromProto(Proto.DestinationKind kind) => kind switch
     {
         Proto.DestinationKind.FileSystem => DestinationKind.FileSystem,
+        Proto.DestinationKind.NetworkShare => DestinationKind.NetworkShare,
+        Proto.DestinationKind.Sftp => DestinationKind.Sftp,
+        Proto.DestinationKind.S3 => DestinationKind.S3,
         _ => throw new AgentException(AgentError.InvalidArgument, "Choose a destination kind."),
     };
+
+    /// <summary>A create or connect request as the agent understands it; the caller disposes its credential.</summary>
+    public static Destinations.DestinationInput FromProto(string name, Proto.DestinationKind kind, string location,
+        Proto.ShareSettings? share, Proto.SftpSettings? sftp, Proto.S3Settings? s3)
+    {
+        var parsedKind = FromProto(kind);
+        static SecureSecret? Secret(string? value) => string.IsNullOrEmpty(value) ? null : new SecureSecret(value);
+        return parsedKind switch
+        {
+            DestinationKind.NetworkShare => new(name, parsedKind, location, new Destinations.DestinationSettings { Username = share?.Username.Trim() }, Secret(share?.Password)),
+            DestinationKind.Sftp => new(name, parsedKind, location, new Destinations.DestinationSettings
+            {
+                Host = sftp?.Host.Trim(),
+                Port = sftp?.Port ?? 0,
+                Username = sftp?.Username.Trim(),
+                RemotePath = sftp?.Path.Trim(),
+                KnownHosts = [.. sftp?.KnownHosts.Select(k => k.Trim()).Where(k => k.Length > 0) ?? []],
+                PrivateKey = !string.IsNullOrEmpty(sftp?.PrivateKey),
+            }, !string.IsNullOrEmpty(sftp?.PrivateKey) ? Secret(sftp.PrivateKey) : Secret(sftp?.Password)),
+            DestinationKind.S3 => new(name, parsedKind, location, new Destinations.DestinationSettings
+            {
+                Endpoint = s3?.Endpoint.Trim(),
+                Bucket = s3?.Bucket.Trim(),
+                Prefix = s3?.Prefix.Trim(),
+                Region = s3?.Region.Trim(),
+                AccessKeyId = s3?.AccessKeyId.Trim(),
+                InsecureHttp = s3?.InsecureHttp ?? false,
+            }, Secret(s3?.SecretAccessKey)),
+            _ => new(name, parsedKind, location, new Destinations.DestinationSettings(), null),
+        };
+    }
 
     public static Proto.Job ToProto(JobView view)
     {

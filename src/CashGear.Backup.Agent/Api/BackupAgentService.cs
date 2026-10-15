@@ -6,6 +6,7 @@ using CashGear.Backup.Agent.Notifications;
 using CashGear.Backup.Agent.Runs;
 using CashGear.Backup.Agent.Security;
 using CashGear.Backup.Core;
+using CashGear.Backup.Data;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Proto = CashGear.Backup.Contracts.V1;
@@ -52,14 +53,26 @@ internal sealed class BackupAgentService(
     public override async Task<Proto.Destination> CreateDestination(Proto.CreateDestinationRequest request, ServerCallContext context)
     {
         auth.Require(context, AccessLevel.Manage);
-        var record = await destinations.AddAsync(request.Name, ProtoMapping.FromProto(request.Kind), request.Location, request.Password, create: true, context.CancellationToken);
+        var input = ProtoMapping.FromProto(request.Name, request.Kind, request.Location, request.Share, request.Sftp, request.S3);
+        DestinationRecord record;
+        using (input.Credential)
+        {
+            record = await destinations.AddAsync(input, request.Password, create: true, context.CancellationToken);
+        }
+
         return ProtoMapping.ToProto(record, engines.StatusOf(record.Id));
     }
 
     public override async Task<Proto.Destination> ConnectDestination(Proto.ConnectDestinationRequest request, ServerCallContext context)
     {
         auth.Require(context, AccessLevel.Manage);
-        var record = await destinations.AddAsync(request.Name, ProtoMapping.FromProto(request.Kind), request.Location, request.Password, create: false, context.CancellationToken);
+        var input = ProtoMapping.FromProto(request.Name, request.Kind, request.Location, request.Share, request.Sftp, request.S3);
+        DestinationRecord record;
+        using (input.Credential)
+        {
+            record = await destinations.AddAsync(input, request.Password, create: false, context.CancellationToken);
+        }
+
         return ProtoMapping.ToProto(record, engines.StatusOf(record.Id));
     }
 

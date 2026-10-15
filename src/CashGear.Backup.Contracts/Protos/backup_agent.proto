@@ -76,8 +76,14 @@ message AgentStatus {
 
 enum DestinationKind {
   DESTINATION_KIND_UNSPECIFIED = 0;
-  // A local disk, removable drive or UNC share the agent can reach.
+  // A local disk, removable drive or UNC share the agent can reach as it is.
   DESTINATION_KIND_FILE_SYSTEM = 1;
+  // A folder on an SMB share (\\server\share\folder in location) reached with its own account (ShareSettings).
+  DESTINATION_KIND_NETWORK_SHARE = 2;
+  // A folder on an SFTP server (SftpSettings).
+  DESTINATION_KIND_SFTP = 3;
+  // A bucket on Amazon S3 or an S3-compatible service (S3Settings).
+  DESTINATION_KIND_S3 = 4;
 }
 
 enum DestinationState {
@@ -104,20 +110,70 @@ message ListDestinationsResponse {
   repeated Destination destinations = 1;
 }
 
-// Carries the repository password: never log this message.
+// The account a network share is opened with. Carries its password: never log this message.
+message ShareSettings {
+  string username = 1;
+  // Write-only.
+  string password = 2;
+}
+
+// Carries the SFTP password or private key: never log this message.
+message SftpSettings {
+  string host = 1;
+  // 0 means 22.
+  int32 port = 2;
+  string username = 3;
+  // Write-only. Either a password or a private key.
+  string password = 4;
+  // Write-only. An OpenSSH private key (the text of the key file).
+  string private_key = 5;
+  // Folder on the server, for example /backups/pc1.
+  string path = 6;
+  // A known_hosts line for every host key the server offers, as the user confirmed them (the app reads them
+  // with the server's fingerprints first). A server presenting another key is refused.
+  repeated string known_hosts = 7;
+}
+
+// Carries the S3 secret key: never log this message.
+message S3Settings {
+  // host[:port] without https://, for example s3.eu-central-1.amazonaws.com.
+  string endpoint = 1;
+  string bucket = 2;
+  // Optional folder inside the bucket, for example pc1/.
+  string prefix = 3;
+  string region = 4;
+  string access_key_id = 5;
+  // Write-only.
+  string secret_access_key = 6;
+  // Plain HTTP: only for a service on the local network that has no HTTPS.
+  bool insecure_http = 7;
+}
+
+// Carries the repository password and the destination's own credentials: never log this message.
 message CreateDestinationRequest {
   string name = 1;
   DestinationKind kind = 2;
+  // FILE_SYSTEM and NETWORK_SHARE: the folder. Ignored for SFTP and S3 (the settings say where).
   string location = 3;
   string password = 4;
+  oneof settings {
+    ShareSettings share = 5;
+    SftpSettings sftp = 6;
+    S3Settings s3 = 7;
+  }
 }
 
-// Carries the repository password: never log this message.
+// Carries the repository password and the destination's own credentials: never log this message.
 message ConnectDestinationRequest {
   string name = 1;
   DestinationKind kind = 2;
   string location = 3;
   string password = 4;
+  oneof settings {
+    ShareSettings share = 5;
+    SftpSettings sftp = 6;
+    S3Settings s3 = 7;
+  }
 }
 
 message Retention {

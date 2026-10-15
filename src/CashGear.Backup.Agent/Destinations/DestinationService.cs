@@ -25,21 +25,11 @@ internal sealed partial class DestinationService(
     /// Creates a new repository (<paramref name="create"/>) or connects an existing one, then stores it. The
     /// engine call comes first, so a wrong password or an unreachable location leaves nothing behind.
     /// </summary>
-    public async Task<DestinationRecord> AddAsync(string name, DestinationKind kind, string location, string password, bool create, CancellationToken ct)
+    public async Task<DestinationRecord> AddAsync(DestinationInput input, string password, bool create, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
+        if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Trim().Length > 200)
         {
             throw new AgentException(AgentError.InvalidArgument, "A destination needs a name of at most 200 characters.");
-        }
-
-        if (kind != DestinationKind.FileSystem)
-        {
-            throw new AgentException(AgentError.InvalidArgument, "Only folder destinations (local disk, USB drive, network share) are supported so far.");
-        }
-
-        if (string.IsNullOrWhiteSpace(location) || !Path.IsPathFullyQualified(location))
-        {
-            throw new AgentException(AgentError.InvalidArgument, "The destination must be an absolute folder path.");
         }
 
         if (string.IsNullOrEmpty(password) || (create && password.Length < MinimumPasswordLength))
@@ -47,25 +37,37 @@ internal sealed partial class DestinationService(
             throw new AgentException(AgentError.InvalidArgument, $"The repository password must be at least {MinimumPasswordLength} characters.");
         }
 
-        location = Path.TrimEndingDirectorySeparator(Path.GetFullPath(location));
+        var location = input.Validate();
         await using var db = await dbs.CreateDbContextAsync(ct);
         if (await db.Destinations.AnyAsync(d => d.Location == location, ct))
         {
             throw new AgentException(AgentError.AlreadyExists, $"{location} is already a destination.");
         }
 
-        var record = new DestinationRecord { Id = Guid.NewGuid(), Name = name.Trim(), Kind = kind, Location = location, ProtectedPassword = [], CreatedAt = time.GetUtcNow() };
+        var record = new DestinationRecord
+        {
+            Id = Guid.NewGuid(), Name = input.Name.Trim(), Kind = input.Kind, Location = location, ProtectedPassword = [], CreatedAt = time.GetUtcNow(),
+            Settings = input.Kind == DestinationKind.FileSystem ? null : input.Settings.ToJson(),
+            ProtectedCredential = input.Credential is { } credential ? protector.Protect(credential) : null,
+        };
         using (var secret = new SecureSecret(password))
         {
-            if (create)
+            await engines.WithSpecAsync(record, async spec =>
             {
-                CreateFolder(location);
-                await engines.Engine.CreateRepositoryAsync(EngineHost.ToSpec(record), secret, ct);
-            }
-            else
-            {
-                await engines.Engine.ConnectRepositoryAsync(EngineHost.ToSpec(record), secret, ct);
-            }
+                if (create)
+                {
+                    if (record.Kind is DestinationKind.FileSystem or DestinationKind.NetworkShare)
+                    {
+                        CreateFolder(location);
+                    }
+
+                    await engines.Engine.CreateRepositoryAsync(spec, secret, ct);
+                }
+                else
+                {
+                    await engines.Engine.ConnectRepositoryAsync(spec, secret, ct);
+                }
+            });
 
             record.ProtectedPassword = protector.Protect(secret);
         }

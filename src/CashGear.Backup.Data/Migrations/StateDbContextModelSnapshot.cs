@@ -42,9 +42,15 @@ namespace CashGear.Backup.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<byte[]>("ProtectedCredential")
+                        .HasColumnType("BLOB");
+
                     b.Property<byte[]>("ProtectedPassword")
                         .IsRequired()
                         .HasColumnType("BLOB");
+
+                    b.Property<string>("Settings")
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 

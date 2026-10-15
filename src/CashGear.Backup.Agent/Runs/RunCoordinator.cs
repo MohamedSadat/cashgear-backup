@@ -80,9 +80,9 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         try
         {
             await InsertAsync(run, ct);
-            if (!EngineHost.IsReachable(destination))
+            if (!await engines.IsReachableAsync(destination, ct))
             {
-                return await FinishEarlyAsync(run, $"The destination {destination.Location} is not reachable (disconnected drive or offline share).");
+                return await FinishEarlyAsync(run, $"The destination {destination.Location} is not reachable (disconnected drive, offline share or server).");
             }
 
             var engine = await engines.ConnectAsync(destination, ct);
@@ -270,9 +270,9 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         RunResult? result;
         try
         {
-            if (!EngineHost.IsReachable(destination))
+            if (!await engines.IsReachableAsync(destination, _stopping.Token))
             {
-                result = Failed($"The destination {destination.Location} is not reachable (disconnected drive or offline share).");
+                result = Failed($"The destination {destination.Location} is not reachable (disconnected drive, offline share or server).");
             }
             else
             {
