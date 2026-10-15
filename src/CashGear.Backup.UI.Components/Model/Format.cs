@@ -23,6 +23,8 @@ public static class Format
         return unit == 0 ? $"{bytes.ToString("N0", s_culture)} B" : $"{value.ToString(value < 10 ? "0.0" : "0", s_culture)} {units[unit]}";
     }
 
+    public static string Number(long value) => value.ToString("N0", s_culture);
+
     public static string Count(long value, string one, string many) =>
         $"{value.ToString("N0", s_culture)} {(value == 1 ? one : many)}";
 

@@ -1,10 +1,21 @@
-<input />
+@* A folder path: typed, or picked with the Windows folder dialog. *@
+@inject IFolderPicker Picker
+
+<div class="folder-field">
+    <input id="@Id" type="text" value="@Value" @onchange="OnChangedAsync" disabled="@Disabled" spellcheck="false" placeholder="@Placeholder" />
+    @if (!Disabled)
+    {
+        <button type="button" id="@($"{Id}-browse")" class="button" @onclick="BrowseAsync">Browse…</button>
+    }
+</div>
+
 @code {
     [Parameter, EditorRequired]
     public string Id { get; set; } = "";
 
+    /// <summary>The folder dialog's title.</summary>
     [Parameter]
-    public string Title { get; set; } = "";
+    public string Title { get; set; } = "Choose a folder";
 
     [Parameter]
     public string Value { get; set; } = "";
@@ -14,4 +25,18 @@
 
     [Parameter]
     public bool Disabled { get; set; }
+
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    private Task OnChangedAsync(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+
+    private async Task BrowseAsync()
+    {
+        var picked = await Picker.PickFolderAsync(Title, string.IsNullOrWhiteSpace(Value) ? null : Value, CancellationToken.None);
+        if (picked is not null)
+        {
+            await ValueChanged.InvokeAsync(picked);
+        }
+    }
 }

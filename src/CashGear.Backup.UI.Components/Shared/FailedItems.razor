@@ -1,4 +1,21 @@
-<div></div>
+@* The items a run could not read or write; the agent sends the first few and the exact count. *@
+@if (Run.FailedItemCount > 0)
+{
+    <div class="failed-items">
+        <p>@Format.Count(Run.FailedItemCount, "item", "items") could not be @(Run.Kind == RunKind.Restore ? "restored" : "backed up"):</p>
+        <ul>
+            @foreach (var item in Run.FailedItems)
+            {
+                <li><span class="path">@item.Path</span> <span class="why">@item.Error</span></li>
+            }
+        </ul>
+        @if (Run.FailedItemCount > Run.FailedItems.Count)
+        {
+            <p class="more">and @(Run.FailedItemCount - Run.FailedItems.Count) more.</p>
+        }
+    </div>
+}
+
 @code {
     [Parameter, EditorRequired]
     public Run Run { get; set; } = null!;

@@ -1,0 +1,31 @@
+@* Live progress of a backup or restore. The bar is exact only when the engine has a size estimate. *@
+<div class="run-progress">
+    <div class="progress @(Percent is null ? "indeterminate" : "")" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent">
+        <div class="bar" style="width: @(Percent ?? 100)%"></div>
+    </div>
+    <p class="progress-text">@Text</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public RunProgress Progress { get; set; } = null!;
+
+    [Parameter]
+    public RunKind Kind { get; set; } = RunKind.Backup;
+
+    private int? Percent => Progress.EstimatedBytes > 0
+        ? (int)Math.Clamp(Progress.BytesProcessed * 100 / Progress.EstimatedBytes, 0, 100)
+        : null;
+
+    private string Text
+    {
+        get
+        {
+            var done = $"{Format.Count(Progress.FilesProcessed, "file", "files")}, {Format.Bytes(Progress.BytesProcessed)}";
+            var text = Kind == RunKind.Restore
+                ? $"Restoring… {done}"
+                : $"Backing up… {done}" + (Progress.EstimatedBytes > 0 ? $" of about {Format.Bytes(Progress.EstimatedBytes)}" : "");
+            return Progress.ErrorCount > 0 ? $"{text}; {Format.Count(Progress.ErrorCount, "problem", "problems")} so far" : text;
+        }
+    }
+}

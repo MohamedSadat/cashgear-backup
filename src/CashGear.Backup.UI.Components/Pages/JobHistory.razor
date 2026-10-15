@@ -1,6 +1,100 @@
 @page "/jobs/{JobId}/history"
-<p>Not built yet.</p>
+@implements IDisposable
+@inject IAgentClient Agent
+@inject UiOptions Options
+@inject TimeProvider Time
+
+<div class="page-head">
+    <h1>History@(_job is null ? "" : $" of {_job.Spec.Name}")</h1>
+    <a class="button" href="">Back to backups</a>
+</div>
+
+<ErrorBox Message="@_error" />
+
+@if (_runs is not null)
+{
+    @if (_runs.Count == 0)
+    {
+        <p class="muted">Nothing has run yet.</p>
+    }
+    else
+    {
+        <table class="history">
+            <thead>
+                <tr><th>Started</th><th>What</th><th>Result</th><th class="num">Files</th><th class="num">Size</th><th>Took</th><th>Details</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var run in _runs)
+                {
+                    <tr class="run">
+                        <td>@Format.When(run.StartedAt, Time)</td>
+                        <td>
+                            @if (run.Kind == RunKind.Restore)
+                            {
+                                <span>Restore</span>
+                            }
+                            else
+                            {
+                                <span>Backup</span>
+                                <span class="muted">@Format.Trigger(run.Trigger)</span>
+                            }
+                        </td>
+                        <td><RunStateBadge State="run.State" /></td>
+                        <td class="num">@Format.Number(run.Files)</td>
+                        <td class="num">@Format.Bytes(run.Bytes)</td>
+                        <td>@Format.Duration(run.StartedAt, run.FinishedAt)</td>
+                        <td>
+                            @if (run.Kind == RunKind.Restore && !string.IsNullOrEmpty(run.RestoreTarget))
+                            {
+                                <p>Into @run.RestoreTarget</p>
+                            }
+                            @if (!string.IsNullOrEmpty(run.Message))
+                            {
+                                <p class="run-message">@run.Message</p>
+                            }
+                            <FailedItems Run="run" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
 @code {
+    private readonly CancellationTokenSource _cts = new();
+    private Job? _job;
+    private IReadOnlyList<Run>? _runs;
+    private string? _error;
+
     [Parameter]
     public string JobId { get; set; } = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _job = (await Agent.ListJobsAsync(_cts.Token)).FirstOrDefault(j => j.Id == JobId);
+            if (_job is null)
+            {
+                _error = "This backup job no longer exists.";
+                return;
+            }
+
+            _runs = await Agent.ListRunsAsync(JobId, Options.HistoryLimit, _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

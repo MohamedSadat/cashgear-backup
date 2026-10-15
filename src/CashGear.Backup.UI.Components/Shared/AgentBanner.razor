@@ -1,1 +1,48 @@
-<div></div>
+@* Says when the backup service cannot be used: not running, not the real service, or still starting. *@
+@implements IDisposable
+@inject AgentMonitor Monitor
+
+@if (Text is { } text)
+{
+    <div class="agent-banner agent-banner-@Tone" role="status">
+        <p>@text</p>
+        @if (Monitor.Connection is AgentConnection.NotRunning or AgentConnection.NotTrusted)
+        {
+            <button type="button" class="button retry" @onclick="RetryAsync" disabled="@_retrying">Try again</button>
+        }
+    </div>
+}
+
+@code {
+    private bool _retrying;
+
+    private string? Text => Monitor.Connection switch
+    {
+        AgentConnection.NotRunning => "The CashGear Backup service is not running, so your backups will not run. Start the service, or restart the PC.",
+        AgentConnection.NotTrusted => $"{Monitor.Problem} Restart the PC; if this keeps happening, reinstall CashGear Backup.",
+        AgentConnection.Starting => "The backup service is starting and reconnecting to your backup destinations.",
+        AgentConnection.Unknown => "Connecting to the backup service…",
+        _ => null,
+    };
+
+    private string Tone => Monitor.Connection is AgentConnection.NotRunning or AgentConnection.NotTrusted ? "error" : "info";
+
+    protected override void OnInitialized() => Monitor.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task RetryAsync()
+    {
+        _retrying = true;
+        try
+        {
+            await Monitor.RefreshAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _retrying = false;
+        }
+    }
+
+    public void Dispose() => Monitor.Changed -= OnChanged;
+}

@@ -1,0 +1,122 @@
+@* One backup job on the dashboard: last good backup, last run, next run, live progress and actions. *@
+@inject TimeProvider Time
+
+<article class="job-card" id="job-@Job.Id">
+    <header class="job-head">
+        <h2>@Job.Spec.Name</h2>
+        @if (!Job.Spec.Enabled)
+        {
+            <span class="badge badge-muted">Paused</span>
+        }
+    </header>
+    <p class="paths">
+        <span class="path">@Job.Spec.SourcePath</span>
+        <span class="arrow" aria-label="backed up to">→</span>
+        <span class="destination">@(Destination?.Name ?? "Unknown destination")</span>
+        @if (Destination is { State: DestinationState.Unavailable })
+        {
+            <span class="badge badge-warn" title="@Destination.StateMessage">Not reachable</span>
+        }
+    </p>
+
+    @if (Progress is not null)
+    {
+        <RunProgressView Progress="Progress" Kind="RunKind.Backup" />
+    }
+    else
+    {
+        <dl class="facts">
+            <div>
+                <dt>Last successful backup</dt>
+                <dd class="last-good">@(LastGood is { } good ? Format.When(good.FinishedAt ?? good.StartedAt, Time) : "None yet")</dd>
+            </div>
+            <div>
+                <dt>Last backup</dt>
+                <dd class="last-run">
+                    @if (Job.LastRun is { } last)
+                    {
+                        <RunStateBadge State="last.State" />
+                        <span class="when">@Format.When(last.StartedAt, Time)</span>
+                    }
+                    else
+                    {
+                        <span>Never</span>
+                    }
+                </dd>
+            </div>
+            <div>
+                <dt>Next backup</dt>
+                <dd class="next-run">
+                    @if (!Job.Spec.Enabled)
+                    {
+                        <span>Paused</span>
+                    }
+                    else if (Job.Spec.Schedule is null || Job.Spec.Schedule.KindCase is Schedule.KindOneofCase.Manual or Schedule.KindOneofCase.None)
+                    {
+                        <span>@Format.Schedule(Job.Spec.Schedule)</span>
+                    }
+                    else
+                    {
+                        <span>@Format.When(Job.NextRunAt, Time)</span>
+                        <span class="schedule">(@Format.Schedule(Job.Spec.Schedule))</span>
+                    }
+                </dd>
+            </div>
+        </dl>
+        @if (Job.LastRun is { State: RunState.CompletedWithWarnings } warned)
+        {
+            <FailedItems Run="warned" />
+        }
+        @if (Job.LastRun is { State: RunState.Failed or RunState.Canceled } bad && !string.IsNullOrEmpty(bad.Message))
+        {
+            <p class="run-message">@bad.Message</p>
+        }
+    }
+
+    <ErrorBox Message="@Error" />
+
+    <footer class="actions">
+        <button type="button" class="button primary backup-now" disabled="@(!CanRun || Progress is not null)" @onclick="OnBackupNow">Back up now</button>
+        @if (Progress is not null)
+        {
+            <button type="button" class="button cancel" @onclick="OnCancel">Cancel</button>
+        }
+        <a class="button" href="jobs/@Job.Id/restore">Restore files</a>
+        <a class="button" href="jobs/@Job.Id/history">History</a>
+        <a class="button" href="jobs/@Job.Id/edit">Change</a>
+    </footer>
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public Job Job { get; set; } = null!;
+
+    [Parameter]
+    public Destination? Destination { get; set; }
+
+    /// <summary>The job's recent runs, newest first.</summary>
+    [Parameter]
+    public IReadOnlyList<Run> Runs { get; set; } = [];
+
+    /// <summary>Set while a backup of this job runs.</summary>
+    [Parameter]
+    public RunProgress? Progress { get; set; }
+
+    [Parameter]
+    public string? Error { get; set; }
+
+    /// <summary>Whether the agent is ready to start a backup.</summary>
+    [Parameter]
+    public bool CanRun { get; set; }
+
+    [Parameter]
+    public EventCallback OnBackupNow { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <summary>The newest backup that recorded a complete restore point with nothing skipped.</summary>
+    private Run? LastGood =>
+        Runs.FirstOrDefault(r => r.Kind == RunKind.Backup && r.State == RunState.Succeeded)
+        ?? (Job.LastRun is { State: RunState.Succeeded } last ? last : null);
+}
