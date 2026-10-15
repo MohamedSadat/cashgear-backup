@@ -16,7 +16,14 @@
     <EmbeddedResource Include="$(CashGearKopiaDir)kopia.pin.json" LogicalName="CashGear.Backup.Engine.Kopia.kopia.pin.json" Link="Hosting\kopia.pin.json" />
   </ItemGroup>
 
+  <!-- Copies the pinned kopia.exe next to every app and test that references the engine (the default
+       KopiaBackupEngineFactory.BundledExecutablePath). Skipped until tools/kopia/fetch-kopia.ps1 has run. -->
+  <ItemGroup Condition="Exists('$(CashGearKopiaDir)kopia.exe')">
+    <None Include="$(CashGearKopiaDir)kopia.exe" Link="kopia.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
