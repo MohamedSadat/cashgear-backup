@@ -85,7 +85,7 @@ over a local named pipe.
 ## Not done yet
 
 - Installer work (Phase 4): data folder ACL, Event Log source, service registration.
-- The client side of pipe-squatting protection (check that the server is the service) belongs with the
-  desktop app (Phase 2).
+- ~~The client side of pipe-squatting protection~~ Done in Phase 2: `AgentServerVerifier` checks every connection
+  (docs/desktop.md).
 - Paging for very large folders in `BrowseSnapshot` (the client's default 4 MB message limit).
 - Notifications and "no backup in N days" alerts (Phase 3); licence checks before runs (Phase 4).

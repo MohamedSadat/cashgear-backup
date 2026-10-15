@@ -9,9 +9,13 @@ customer sees is .NET 10 C#.
 - **Verified Kopia behaviour:** [spikes/KopiaSpike/FINDINGS.md](spikes/KopiaSpike/FINDINGS.md). Where it
   disagrees with the plan, FINDINGS wins (it was observed against the pinned binary).
 - **Agent design, security model and its findings:** [docs/agent.md](docs/agent.md).
-- **Status:** Foundation, Phase 0 and Phase 1 done: the Kopia engine behind `IBackupEngine` (1a) and the
-  agent with state.db, schedules and the gRPC pipe API (1b). Next: Phase 2, the desktop app, against
-  `backup_agent.proto`; it requests UAC elevation for Manage calls (docs/agent.md, "Security model"). Open decisions are at the end of FINDINGS and of docs/agent.md.
+- **Desktop app design (elevation, pipe check), findings and review items:** [docs/desktop.md](docs/desktop.md).
+- **Status:** Foundation, Phase 0, Phase 1 (engine 1a, agent 1b) and Phase 2 done: the desktop app (WPF +
+  BlazorWebView, tray icon, single instance) with dashboard, job wizard, restore and history, talking to the agent
+  through `IAgentClient`; Manage calls go through a UAC-elevated helper. Phase 2 leaves out SMB-with-credentials,
+  SFTP and S3 destinations (the agent supports folders only). Next: those destinations, or Phase 3 (restore wizard
+  with search, verify jobs, alerts, Recovery Kit). Open decisions are at the end of FINDINGS, docs/agent.md and
+  docs/desktop.md.
 
 ## Architecture
 
@@ -72,6 +76,11 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
     `Agent:AllowNonElevatedManage` is for tests only. Never impersonate the pipe client
     on a request thread (docs/agent.md, finding 1), and never log gRPC request messages (they can carry
     passwords).
+12. **The desktop app reaches the agent only through `IAgentClient`.** Every pipe connection is checked by
+    `AgentServerVerifier` (the CashGearBackupAgent service process or LocalSystem) before anything is sent; the
+    same-user trust and the pipe override exist in Debug builds only. Manage calls the app's connection may not make
+    go through the elevated helper (docs/desktop.md); keep it a whitelist of the Manage calls with process-id checks
+    on both ends of its pipe, and never put a password on a command line.
 
 ## Build and test
 
@@ -92,6 +101,13 @@ $env:Agent__DataDirectory = "$env:TEMP\cashgear-dev"; $env:Agent__AllowNonElevat
 dotnet run --project src\CashGear.Backup.Agent
 ```
 
+Run the desktop app against that agent (Debug builds only honour these; see docs/desktop.md):
+
+```powershell
+$env:CASHGEAR_AGENT_PIPE = "<the agent's Agent__PipeName>"; $env:CASHGEAR_TRUST_DEV_AGENT = "1"
+dotnet run --project src\CashGear.Backup.Desktop
+```
+
 Tests that need Kopia find it via `CASHGEAR_KOPIA_EXE` or `tools/kopia/kopia.exe` and fail with the
 fetch command if it is missing or does not match the pin (a new git worktree needs the fetch too). The
 engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KEEP_TEST_WORKSPACE=1` to keep
@@ -107,11 +123,14 @@ engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KE
 | `src/CashGear.Backup.Agent` | Windows Service: `AgentHost` (pipe-only Kestrel, gRPC), `Api/`, `Runs/`, `Scheduling/` (Quartz), `Security/` (DPAPI, caller checks), `Hosting/` (lifecycle, pipe ACL). Later: notifications, updater |
 | `src/CashGear.Backup.Data` | EF Core + SQLite state.db: destinations, jobs, run history, settings; `Migrations/` |
 | `src/CashGear.Backup.Contracts` | `Protos/backup_agent.proto` (the desktop app's API) and `AgentChannel` (named-pipe gRPC channel) |
-| `src/CashGear.Backup.UI.Components` | Razor class library: pages, wizards, file browser |
-| `src/CashGear.Backup.Desktop` | WPF host: BlazorWebView, tray icon |
+| `src/CashGear.Backup.Client` | The app's side of the API: `IAgentClient`/`AgentClient`, `Security/` pipe-server check, `Elevation/` UAC helper (both ends) |
+| `src/CashGear.Backup.UI.Components` | Razor class library: `Pages/` (dashboard, job wizard, restore, history), `Shared/` components, `Model/` (wizard draft, formatting, error texts), `Services/` (agent monitor, picker and shell seams) |
+| `src/CashGear.Backup.Desktop` | WPF host: BlazorWebView, tray icon, single instance; the same exe is the elevated helper |
 | `installer/` | WiX MSI (Phase 4; placeholder for now) |
 | `tools/kopia/` | Kopia pin, fetch script, LICENSE (exe is gitignored) |
 | `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest) |
+| `tests/CashGear.Backup.Client.Tests` | `AgentClient`, the pipe-server check and the elevated-helper relay against the agent hosted in-process (links `AgentHarness`) |
+| `tests/CashGear.Backup.UI.Components.Tests` | bUnit tests of the pages and components against a fake `IAgentClient`, plus the view models |
 | `tests/CashGear.Backup.Agent.Tests` | state.db, DPAPI, schedules, pipe ACL, and the whole agent hosted in-process on a private pipe, driven through `AgentChannel` against the pinned kopia.exe |
 | `tests/CashGear.Backup.Engine.Kopia.IntegrationTests` | `Contract/` one test per Kopia endpoint, `Engine/` round trips and data-safety rules through `IBackupEngine`, `Hosting/` process host, `Unit/` no-Kopia checks |
 | `spikes/KopiaSpike` | Phase 0 throwaway spike and its tests; lift proven code into Engine.Kopia, then delete |
