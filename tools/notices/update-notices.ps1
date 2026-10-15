@@ -1,6 +1,8 @@
 # Regenerates THIRD-PARTY-NOTICES.txt (repo root) from what the agent and the desktop app ship: the pinned
-# kopia.exe and every NuGet package with runtime files. Run after a restore or build, whenever a package or the
-# kopia pin changes; NoticesTests fails until the file is current.
+# kopia.exe, the Go modules inside it (tools\notices\kopia-go-modules.json and kopia-go-licenses, written by
+# collect-kopia-go-modules.ps1) and every NuGet package with runtime files. Run after a restore or build, whenever a
+# package or the kopia pin changes (for a new pin, run collect-kopia-go-modules.ps1 first); NoticesTests fails until
+# the file is current. Reads only local files.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\notices\update-notices.ps1
 
@@ -55,6 +57,35 @@ $rows = foreach ($key in ($packages.Keys | Sort-Object)) {
 
 $pin = Get-Content (Join-Path $root 'tools\kopia\kopia.pin.json') -Raw | ConvertFrom-Json
 $apache = (Get-Content (Join-Path $root 'tools\kopia\LICENSE') -Raw).TrimEnd()
+
+$goData = Get-Content (Join-Path $PSScriptRoot 'kopia-go-modules.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($goData.kopiaVersion -ne $pin.version -or $goData.kopiaExeSha256 -ne $pin.exe.sha256) {
+    throw "kopia-go-modules.json describes Kopia $($goData.kopiaVersion), the pin is $($pin.version): run tools\notices\collect-kopia-go-modules.ps1 first."
+}
+$goVersion = $goData.go.version -replace '^go', ''
+$goEntries = @([pscustomobject]@{
+    Title = "Go $goVersion standard library and runtime"; Label = "Go $goVersion"; Folder = 'std'; Item = $goData.go
+    Source = "https://go.googlesource.com/go/+/refs/tags/$($goData.go.version)"
+}) + @(foreach ($module in $goData.modules) {
+    [pscustomobject]@{
+        Title = "$($module.path) $($module.version)"; Label = "$($module.path) $($module.version)"; Folder = $module.path
+        Item = $module; Source = "https://pkg.go.dev/$($module.path)@$($module.version)"
+    }
+})
+
+# Licence and NOTICE texts of the Go modules, each distinct text once with the files that carry it. Files that are
+# the Apache-2.0 text of section 4 (standardApache) are not repeated.
+$goTexts = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal)
+foreach ($entry in $goEntries) {
+    foreach ($file in $entry.Item.files) {
+        if ($file.PSObject.Properties['standardApache']) { continue }
+        $path = Join-Path $PSScriptRoot ("kopia-go-licenses\$($entry.Folder)\$($file.path)" -replace '/', '\')
+        $lines = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8).Replace("`r`n", "`n").Split("`n") | ForEach-Object { $_.TrimEnd() }
+        $text = ($lines -join "`n").Trim("`n")
+        if (-not $goTexts.Contains($text)) { $goTexts.Add($text, (New-Object System.Collections.Generic.List[string])) }
+        $goTexts[$text].Add("$($entry.Label): $($file.path)")
+    }
+}
 $mit = @'
 MIT License
 
@@ -108,8 +139,8 @@ $out = New-Object System.Text.StringBuilder
 [void]$out.AppendLine("  Licence: $($pin.license), full text in section 4")
 [void]$out.AppendLine('  Copyright: The Kopia Authors')
 [void]$out.AppendLine('  Source: https://github.com/kopia/kopia')
-[void]$out.AppendLine('  kopia.exe also contains Go modules under their own licences; their notices are listed in')
-[void]$out.AppendLine('  section 3 once collected (open item before release, see installer\CashGear.Backup.Installer\README.md).')
+[void]$out.AppendLine('  kopia.exe also contains the Go standard library and Go modules under their own licences, listed in')
+[void]$out.AppendLine('  section 3.')
 [void]$out.AppendLine()
 [void]$out.AppendLine('2. .NET runtime and packages')
 [void]$out.AppendLine('----------------------------')
@@ -129,8 +160,20 @@ foreach ($row in $rows) {
 [void]$out.AppendLine('3. Go modules in kopia.exe')
 [void]$out.AppendLine('--------------------------')
 [void]$out.AppendLine()
-[void]$out.AppendLine('Not yet collected.')
+[void]$out.AppendLine("kopia.exe (Kopia $($pin.version)) contains the Go $goVersion standard library and runtime and the $(@($goData.modules).Count) Go modules below,")
+[void]$out.AppendLine('as recorded in the build information inside the binary. Their licence and NOTICE files are reproduced in')
+[void]$out.AppendLine('section 5, except files that hold the Apache-2.0 text of section 4.')
 [void]$out.AppendLine()
+foreach ($entry in $goEntries) {
+    $copyright = @($entry.Item.copyright)
+    if ($copyright.Count -eq 0) { $copyright = @("(none in the module's licence files)") }
+    [void]$out.AppendLine($entry.Title)
+    [void]$out.AppendLine("  Licence: $($entry.Item.license)")
+    [void]$out.AppendLine("  Copyright: $($copyright[0])")
+    foreach ($line in ($copyright | Select-Object -Skip 1)) { [void]$out.AppendLine("             $line") }
+    [void]$out.AppendLine("  Source: $($entry.Source)")
+    [void]$out.AppendLine()
+}
 [void]$out.AppendLine('4. Licence texts')
 [void]$out.AppendLine('----------------')
 [void]$out.AppendLine()
@@ -151,7 +194,18 @@ foreach ($file in $licenceFiles) {
     [void]$out.AppendLine()
     [void]$out.AppendLine($file.Text)
 }
+[void]$out.AppendLine()
+[void]$out.AppendLine('5. Go module licence and notice files')
+[void]$out.AppendLine('-------------------------------------')
+foreach ($text in $goTexts.Keys) {
+    [void]$out.AppendLine()
+    [void]$out.AppendLine('----')
+    [void]$out.AppendLine()
+    foreach ($label in $goTexts[$text]) { [void]$out.AppendLine($label) }
+    [void]$out.AppendLine()
+    [void]$out.AppendLine($text)
+}
 
 $target = Join-Path $root 'THIRD-PARTY-NOTICES.txt'
 [System.IO.File]::WriteAllText($target, $out.ToString().Replace("`r`n", "`n").Replace("`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "Wrote $target ($($rows.Count) packages)."
+Write-Host "Wrote $target ($($rows.Count) packages, $(@($goData.modules).Count) Go modules)."
