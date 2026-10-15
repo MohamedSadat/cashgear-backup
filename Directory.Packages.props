@@ -28,6 +28,9 @@
     <!-- Pinned above MimeKit's 10.0.0 dependency, which has known vulnerabilities (NU1902/NU1903). -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
+  <ItemGroup Label="Installer">
+    <PackageVersion Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="bunit" Version="2.11.3" />

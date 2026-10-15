@@ -14,6 +14,7 @@
     <Project Path="tests/CashGear.Backup.Client.Tests/CashGear.Backup.Client.Tests.csproj" />
     <Project Path="tests/CashGear.Backup.Core.Tests/CashGear.Backup.Core.Tests.csproj" />
     <Project Path="tests/CashGear.Backup.Engine.Kopia.IntegrationTests/CashGear.Backup.Engine.Kopia.IntegrationTests.csproj" />
+    <Project Path="tests/CashGear.Backup.Installer.Tests/CashGear.Backup.Installer.Tests.csproj" />
     <Project Path="tests/CashGear.Backup.UI.Components.Tests/CashGear.Backup.UI.Components.Tests.csproj" />
   </Folder>
 </Solution>

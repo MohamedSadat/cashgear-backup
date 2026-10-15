@@ -1,0 +1,41 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- The CashGear Backup MSI. WiX 5.0.2 on purpose: later versions need the Open Source Maintenance Fee EULA
+       accepted (see README.md). Build it with installer\build-installer.ps1, which publishes the agent and the
+       desktop app into $(PublishRoot) first. -->
+  <PropertyGroup>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <OutputName>CashGearBackup-$(ProductVersion)</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishRoot Condition="'$(PublishRoot)' == ''">$(CashGearRepoRoot)artifacts\publish\</PublishRoot>
+    <AgentPublishDir>$(PublishRoot)agent</AgentPublishDir>
+    <DesktopPublishDir>$(PublishRoot)desktop</DesktopPublishDir>
+    <DefineConstants>ProductVersion=$(ProductVersion);AgentDir=$(AgentPublishDir);DesktopDir=$(DesktopPublishDir)</DefineConstants>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- ICE38/ICE43/ICE57 assume the Start menu is per user; in this per-machine package it is the all-users one.
+         ICE60: some runtime files carry a version but no language, which only matters for file version rules. -->
+    <SuppressIces>ICE38;ICE43;ICE57;ICE60</SuppressIces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+
+  <!-- The engine binary that goes into the MSI must be the pinned one (CLAUDE.md rule 6). -->
+  <Target Name="VerifyEnginePin" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <EngineExe>$(AgentPublishDir)\kopia.exe</EngineExe>
+      <EnginePinJson>$([System.IO.File]::ReadAllText('$(CashGearKopiaDir)kopia.pin.json'))</EnginePinJson>
+      <EnginePinSha>$([System.Text.RegularExpressions.Regex]::Replace($(EnginePinJson), '(?s)^.*"exe"\s*:\s*\{[^}]*"sha256"\s*:\s*"([0-9a-fA-F]{64})".*$', '$1').ToLowerInvariant())</EnginePinSha>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(AgentPublishDir)\CashGear.Backup.Agent.exe')" Text="$(AgentPublishDir) has no published agent: run installer\build-installer.ps1." />
+    <Error Condition="!Exists('$(DesktopPublishDir)\CashGear.Backup.Desktop.exe')" Text="$(DesktopPublishDir) has no published desktop app: run installer\build-installer.ps1." />
+    <Error Condition="!Exists('$(EngineExe)')" Text="$(EngineExe) is missing: run tools\kopia\fetch-kopia.ps1, then installer\build-installer.ps1." />
+    <Error Condition="'$(EnginePinSha.Length)' != '64'" Text="Could not read the engine's SHA-256 from kopia.pin.json." />
+    <GetFileHash Files="$(EngineExe)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="EngineSha" />
+    </GetFileHash>
+    <Error Condition="'$(EngineSha.ToLowerInvariant())' != '$(EnginePinSha)'" Text="$(EngineExe) does not match tools\kopia\kopia.pin.json (SHA-256 $(EngineSha)); it is not the pinned binary." />
+  </Target>
+
+</Project>
