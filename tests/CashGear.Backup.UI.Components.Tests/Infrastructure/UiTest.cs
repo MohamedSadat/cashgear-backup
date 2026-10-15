@@ -22,6 +22,13 @@ public abstract class UiTest : BunitContext
         Services.AddSingleton<TimeProvider>(Time);
         Services.AddSingleton<IFolderPicker>(Picker);
         Services.AddSingleton<IDesktopShell>(Shell);
+        Services.AddSingleton<CashGear.Backup.Client.Security.ISftpHostKeyProbe>(new NoProbe());
+    }
+
+    private sealed class NoProbe : CashGear.Backup.Client.Security.ISftpHostKeyProbe
+    {
+        public Task<IReadOnlyList<CashGear.Backup.Client.Security.SftpHostKey>> ProbeAsync(string host, int port, CancellationToken ct) =>
+            throw new IOException("No SFTP server in this test.");
     }
 
     private protected FakeAgentClient Agent { get; }

@@ -61,6 +61,7 @@ public partial class App : Application
         services.AddSingleton<IAgentClient>(sp => new AgentClient(
             new AgentClientOptions { PipeName = settings.AgentPipeName, Verifier = sp.GetRequiredService<IAgentServerVerifier>() },
             sp.GetRequiredService<IManageRelay>()));
+        services.AddSingleton<ISftpHostKeyProbe, SftpHostKeyProbe>();
         services.AddSingleton<IFolderPicker, WpfFolderPicker>();
         services.AddSingleton<IDesktopShell, DesktopShell>();
         return services.BuildServiceProvider();

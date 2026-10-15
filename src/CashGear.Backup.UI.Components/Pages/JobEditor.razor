@@ -6,6 +6,7 @@
 @inject AgentMonitor Monitor
 @inject IDesktopShell Shell
 @inject TimeProvider Time
+@inject CashGear.Backup.Client.Security.ISftpHostKeyProbe HostKeyProbe
 
 @* The job wizard: what, where, when, how long, review. Editing skips "where": a job's folder and destination are fixed. *@
 
@@ -116,11 +117,141 @@ else
                         <label for="destination-name">Name</label>
                         <input id="destination-name" type="text" maxlength="200" placeholder="Backup disk" @bind="_draft.DestinationName" />
                     </div>
-                    <div class="field">
-                        <label for="destination-location">Folder</label>
-                        <FolderField Id="destination-location" Title="Choose where to keep the backups" Value="@_draft.DestinationLocation" ValueChanged="OnLocationChanged" />
-                        <p class="hint">A folder on another disk, a USB drive or a network share (\\server\share\folder). The backup service must be able to reach it.</p>
-                    </div>
+                    <fieldset class="choices">
+                        <legend>What kind of place</legend>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-folder" name="destination-type" checked="@(_draft.DestinationType == DestinationType.Folder)" @onchange="() => _draft.DestinationType = DestinationType.Folder" />
+                            A folder on this PC, another disk or a USB drive
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-share" name="destination-type" checked="@(_draft.DestinationType == DestinationType.NetworkShare)" @onchange="() => _draft.DestinationType = DestinationType.NetworkShare" />
+                            A network share (NAS) with its own account
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-sftp" name="destination-type" checked="@(_draft.DestinationType == DestinationType.Sftp)" @onchange="() => _draft.DestinationType = DestinationType.Sftp" />
+                            An SFTP server
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-s3" name="destination-type" checked="@(_draft.DestinationType == DestinationType.S3)" @onchange="() => _draft.DestinationType = DestinationType.S3" />
+                            S3-compatible cloud storage (Amazon S3, Backblaze B2, Wasabi and others)
+                        </label>
+                    </fieldset>
+                    @switch (_draft.DestinationType)
+                    {
+                        case DestinationType.Folder:
+                            <div class="field">
+                                <label for="destination-location">Folder</label>
+                                <FolderField Id="destination-location" Title="Choose where to keep the backups" Value="@_draft.DestinationLocation" ValueChanged="OnLocationChanged" />
+                                <p class="hint">A folder on another disk or a USB drive. The backup service must be able to reach it.</p>
+                            </div>
+                            break;
+                        case DestinationType.NetworkShare:
+                            <div class="field">
+                                <label for="destination-location">Share and folder</label>
+                                <FolderField Id="destination-location" Title="Choose the folder on the network share" Placeholder="\\server\share\folder" Value="@_draft.DestinationLocation" ValueChanged="OnLocationChanged" />
+                            </div>
+                            <div class="field">
+                                <label for="share-username">Account on the share</label>
+                                <input id="share-username" type="text" autocomplete="off" placeholder="NAS\backup" @bind="_draft.ShareUsername" />
+                            </div>
+                            <div class="field">
+                                <label for="share-password">Its password</label>
+                                <input id="share-password" type="password" autocomplete="new-password" @bind="_draft.SharePassword" />
+                                <p class="hint">The backup service connects to the share with this account; your own mapped drives and saved passwords are not used.</p>
+                            </div>
+                            break;
+                        case DestinationType.Sftp:
+                            <div class="field inline">
+                                <label for="sftp-host">Server</label>
+                                <input id="sftp-host" type="text" placeholder="nas.local" @bind="_draft.SftpHost" />
+                                <label for="sftp-port">Port</label>
+                                <input id="sftp-port" type="number" min="1" max="65535" @bind="_draft.SftpPort" />
+                            </div>
+                            <div class="field">
+                                <label for="sftp-username">Username</label>
+                                <input id="sftp-username" type="text" autocomplete="off" @bind="_draft.SftpUsername" />
+                            </div>
+                            <fieldset class="choices">
+                                <legend class="sr-only">Sign-in</legend>
+                                <label class="choice">
+                                    <input type="radio" id="sftp-auth-password" name="sftp-auth" checked="@(!_draft.SftpUseKey)" @onchange="() => _draft.SftpUseKey = false" />
+                                    Password
+                                </label>
+                                <label class="choice">
+                                    <input type="radio" id="sftp-auth-key" name="sftp-auth" checked="@_draft.SftpUseKey" @onchange="() => _draft.SftpUseKey = true" />
+                                    Private key
+                                </label>
+                            </fieldset>
+                            @if (_draft.SftpUseKey)
+                            {
+                                <div class="field">
+                                    <label for="sftp-key">Private key (paste the key file's text)</label>
+                                    <textarea id="sftp-key" rows="5" spellcheck="false" @bind="_draft.SftpPrivateKey"></textarea>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="field">
+                                    <label for="sftp-password">SFTP password</label>
+                                    <input id="sftp-password" type="password" autocomplete="new-password" @bind="_draft.SftpPassword" />
+                                </div>
+                            }
+                            <div class="field">
+                                <label for="sftp-path">Folder on the server</label>
+                                <input id="sftp-path" type="text" placeholder="/backups/my-pc" @bind="_draft.SftpPath" />
+                            </div>
+                            <div class="actions">
+                                <button type="button" id="sftp-check" class="button" @onclick="CheckServerAsync" disabled="@(_checkingServer || _draft.SftpHost.Trim().Length == 0)">Check the server</button>
+                            </div>
+                            <ErrorBox Message="@_probeError" />
+                            @if (_draft.SftpHostKeys.Count > 0)
+                            {
+                                <div class="host-keys">
+                                    <p>The server identifies itself with these fingerprints:</p>
+                                    <ul>
+                                        @foreach (var key in _draft.SftpHostKeys)
+                                        {
+                                            <li><span class="muted">@key.KeyType</span> <span class="path">@key.Fingerprint</span></li>
+                                        }
+                                    </ul>
+                                    <label class="choice">
+                                        <input type="checkbox" id="sftp-trust" checked="@_draft.SftpHostKeysConfirmed" @onchange="e => _draft.SftpHostKeysConfirmed = e.Value is true" />
+                                        These match the server (ask whoever runs it, or look in its settings)
+                                    </label>
+                                </div>
+                            }
+                            break;
+                        case DestinationType.S3:
+                            <div class="field">
+                                <label for="s3-endpoint">Endpoint</label>
+                                <input id="s3-endpoint" type="text" placeholder="s3.amazonaws.com" @bind="_draft.S3Endpoint" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-region">Region (if the service needs one)</label>
+                                <input id="s3-region" type="text" placeholder="eu-central-1" @bind="_draft.S3Region" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-bucket">Bucket</label>
+                                <input id="s3-bucket" type="text" @bind="_draft.S3Bucket" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-prefix">Folder in the bucket (optional)</label>
+                                <input id="s3-prefix" type="text" placeholder="my-pc/" @bind="_draft.S3Prefix" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-access-key">Access key ID</label>
+                                <input id="s3-access-key" type="text" autocomplete="off" @bind="_draft.S3AccessKeyId" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-secret">Secret access key</label>
+                                <input id="s3-secret" type="password" autocomplete="new-password" @bind="_draft.S3SecretKey" />
+                            </div>
+                            <label class="choice">
+                                <input type="checkbox" id="s3-https" @bind="_draft.S3UseHttps" />
+                                Use HTTPS (untick only for a service on your own network without HTTPS)
+                            </label>
+                            break;
+                    }
                     @if (_draft.DestinationChoice == DestinationChoice.CreateNew)
                     {
                         <p id="password-warning" class="warning">
@@ -322,6 +453,8 @@ else
     private bool _jobCreated;
     private bool _kitIncludePassword;
     private string? _kitSaved;
+    private bool _checkingServer;
+    private string? _probeError;
 
     /// <summary>Set when changing an existing job.</summary>
     [Parameter]
@@ -333,7 +466,7 @@ else
         _draft is null ? ""
         : _draft.DestinationChoice == DestinationChoice.Existing
             ? _destinations.FirstOrDefault(d => d.Id == _draft.DestinationId) is { } d ? $"{d.Name} ({d.Location})" : "the destination"
-            : $"{_draft.DestinationName} ({_draft.DestinationLocation}), {(_draft.DestinationChoice == DestinationChoice.CreateNew ? "new" : "made earlier")}";
+            : $"{_draft.DestinationName} ({_draft.DestinationDisplay}), {(_draft.DestinationChoice == DestinationChoice.CreateNew ? "new" : "made earlier")}";
 
     private string RetentionSummary
     {
@@ -433,6 +566,28 @@ else
         }
     }
 
+    /// <summary>Reads the SFTP server's host keys (as the user, before anything is sent) for the user to confirm.</summary>
+    private async Task CheckServerAsync()
+    {
+        _probeError = null;
+        _checkingServer = true;
+        try
+        {
+            _draft!.SetHostKeys(await HostKeyProbe.ProbeAsync(_draft.SftpHost.Trim(), _draft.SftpPort, _cts.Token));
+        }
+        catch (IOException ex)
+        {
+            _probeError = $"The server did not answer: {ex.Message}";
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _checkingServer = false;
+        }
+    }
+
     private void ToggleDay(DayOfWeek day, ChangeEventArgs e)
     {
         var on = e.Value is true || (e.Value is string text && bool.TryParse(text, out var parsed) && parsed);
@@ -519,24 +674,12 @@ else
         switch (draft.DestinationChoice)
         {
             case DestinationChoice.CreateNew:
-                destination = await Agent.CreateDestinationAsync(new CreateDestinationRequest
-                {
-                    Name = draft.DestinationName.Trim(),
-                    Kind = DestinationKind.FileSystem,
-                    Location = draft.DestinationLocation.Trim(),
-                    Password = draft.Password,
-                }, _cts.Token);
+                destination = await Agent.CreateDestinationAsync(draft.ToCreateDestination(), _cts.Token);
                 _newDestination = destination;
                 _kitPassword = draft.Password;
                 break;
             case DestinationChoice.ConnectExisting:
-                destination = await Agent.ConnectDestinationAsync(new ConnectDestinationRequest
-                {
-                    Name = draft.DestinationName.Trim(),
-                    Kind = DestinationKind.FileSystem,
-                    Location = draft.DestinationLocation.Trim(),
-                    Password = draft.Password,
-                }, _cts.Token);
+                destination = await Agent.ConnectDestinationAsync(draft.ToConnectDestination(), _cts.Token);
                 break;
             default:
                 return draft.DestinationId;

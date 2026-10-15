@@ -1,4 +1,5 @@
 using System.Globalization;
+using CashGear.Backup.Client.Security;
 using CashGear.Backup.Contracts.V1;
 
 namespace CashGear.Backup.UI.Components.Model;
@@ -22,6 +23,21 @@ public enum DestinationChoice
 
     /// <summary>Connect a repository made earlier (a reinstall, another PC).</summary>
     ConnectExisting,
+}
+
+/// <summary>What kind of place a new or earlier destination is.</summary>
+public enum DestinationType
+{
+    /// <summary>A folder on this PC, another disk or a USB drive.</summary>
+    Folder,
+
+    /// <summary>An SMB share opened with its own account.</summary>
+    NetworkShare,
+
+    Sftp,
+
+    /// <summary>Amazon S3 or an S3-compatible service.</summary>
+    S3,
 }
 
 public enum ScheduleChoice
@@ -67,6 +83,63 @@ public sealed class JobDraft
     public string Password { get; set; } = "";
     public string PasswordConfirmation { get; set; } = "";
 
+    public DestinationType DestinationType { get; set; } = DestinationType.Folder;
+
+    // Network share
+    public string ShareUsername { get; set; } = "";
+    public string SharePassword { get; set; } = "";
+
+    // SFTP. Changing the server forgets the host keys read from the old one.
+    private string _sftpHost = "";
+    private int _sftpPort = 22;
+
+    public string SftpHost
+    {
+        get => _sftpHost;
+        set
+        {
+            if (value != _sftpHost)
+            {
+                _sftpHost = value;
+                ForgetHostKeys();
+            }
+        }
+    }
+
+    public int SftpPort
+    {
+        get => _sftpPort;
+        set
+        {
+            if (value != _sftpPort)
+            {
+                _sftpPort = value;
+                ForgetHostKeys();
+            }
+        }
+    }
+
+    public string SftpUsername { get; set; } = "";
+    public bool SftpUseKey { get; set; }
+    public string SftpPassword { get; set; } = "";
+    public string SftpPrivateKey { get; set; } = "";
+    public string SftpPath { get; set; } = "";
+
+    /// <summary>The keys the server showed when it was checked; empty until then.</summary>
+    public IReadOnlyList<SftpHostKey> SftpHostKeys { get; private set; } = [];
+
+    /// <summary>The user said the fingerprints match the server.</summary>
+    public bool SftpHostKeysConfirmed { get; set; }
+
+    // S3
+    public string S3Endpoint { get; set; } = "s3.amazonaws.com";
+    public string S3Region { get; set; } = "";
+    public string S3Bucket { get; set; } = "";
+    public string S3Prefix { get; set; } = "";
+    public string S3AccessKeyId { get; set; } = "";
+    public string S3SecretKey { get; set; } = "";
+    public bool S3UseHttps { get; set; } = true;
+
     // When
     public ScheduleChoice ScheduleChoice { get; set; } = ScheduleChoice.Daily;
 
@@ -98,7 +171,7 @@ public sealed class JobDraft
     public static JobDraft ForNew(IReadOnlyList<Destination> destinations)
     {
         ArgumentNullException.ThrowIfNull(destinations);
-        var draft = new JobDraft();
+        var draft = new JobDraft { S3Prefix = Environment.MachineName.ToLowerInvariant() + "/" };
         if (destinations.Count > 0)
         {
             draft.DestinationChoice = DestinationChoice.Existing;
@@ -204,12 +277,110 @@ public sealed class JobDraft
         }
     }
 
-    /// <summary>Called once the agent has the password (or the wizard is left): it is not kept around.</summary>
+    /// <summary>Called once the agent has the passwords (or the wizard is left): they are not kept around.</summary>
     public void ForgetPasswords()
     {
         Password = "";
         PasswordConfirmation = "";
+        SharePassword = "";
+        SftpPassword = "";
+        SftpPrivateKey = "";
+        S3SecretKey = "";
     }
+
+    public void SetHostKeys(IReadOnlyList<SftpHostKey> keys)
+    {
+        SftpHostKeys = keys;
+        SftpHostKeysConfirmed = false;
+    }
+
+    private void ForgetHostKeys()
+    {
+        SftpHostKeys = [];
+        SftpHostKeysConfirmed = false;
+    }
+
+    public DestinationKind DestinationKind => DestinationType switch
+    {
+        DestinationType.NetworkShare => DestinationKind.NetworkShare,
+        DestinationType.Sftp => DestinationKind.Sftp,
+        DestinationType.S3 => DestinationKind.S3,
+        _ => DestinationKind.FileSystem,
+    };
+
+    /// <summary>Where the new destination is, for the review page.</summary>
+    public string DestinationDisplay => DestinationType switch
+    {
+        DestinationType.Sftp => $"sftp://{SftpUsername.Trim()}@{SftpHost.Trim()}:{SftpPort}{SftpPath.Trim()}",
+        DestinationType.S3 => $"s3://{S3Bucket.Trim()}/{S3Prefix.Trim()} at {S3Endpoint.Trim()}",
+        _ => DestinationLocation.Trim(),
+    };
+
+    public CreateDestinationRequest ToCreateDestination()
+    {
+        var request = new CreateDestinationRequest { Name = DestinationName.Trim(), Kind = DestinationKind, Location = DestinationLocation.Trim(), Password = Password };
+        switch (DestinationType)
+        {
+            case DestinationType.NetworkShare:
+                request.Share = Share();
+                break;
+            case DestinationType.Sftp:
+                request.Sftp = Sftp();
+                break;
+            case DestinationType.S3:
+                request.S3 = S3();
+                break;
+        }
+
+        return request;
+    }
+
+    public ConnectDestinationRequest ToConnectDestination()
+    {
+        var request = new ConnectDestinationRequest { Name = DestinationName.Trim(), Kind = DestinationKind, Location = DestinationLocation.Trim(), Password = Password };
+        switch (DestinationType)
+        {
+            case DestinationType.NetworkShare:
+                request.Share = Share();
+                break;
+            case DestinationType.Sftp:
+                request.Sftp = Sftp();
+                break;
+            case DestinationType.S3:
+                request.S3 = S3();
+                break;
+        }
+
+        return request;
+    }
+
+    private ShareSettings Share() => new() { Username = ShareUsername.Trim(), Password = SharePassword };
+
+    private SftpSettings Sftp()
+    {
+        var settings = new SftpSettings
+        {
+            Host = SftpHost.Trim(),
+            Port = SftpPort,
+            Username = SftpUsername.Trim(),
+            Password = SftpUseKey ? "" : SftpPassword,
+            PrivateKey = SftpUseKey ? SftpPrivateKey.Trim() + "\n" : "",
+            Path = SftpPath.Trim(),
+        };
+        settings.KnownHosts.AddRange(SftpHostKeys.Select(k => k.KnownHostsLine(SftpHost.Trim(), SftpPort)));
+        return settings;
+    }
+
+    private S3Settings S3() => new()
+    {
+        Endpoint = S3Endpoint.Trim(),
+        Region = S3Region.Trim(),
+        Bucket = S3Bucket.Trim(),
+        Prefix = S3Prefix.Trim(),
+        AccessKeyId = S3AccessKeyId.Trim(),
+        SecretAccessKey = S3SecretKey,
+        InsecureHttp = !S3UseHttps,
+    };
 
     public static int? ParseMinuteOfDay(string? text) =>
         TimeOnly.TryParseExact(text?.Trim(), ["HH:mm", "H:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time)
@@ -251,14 +422,7 @@ public sealed class JobDraft
                     errors.Add($"Give the destination a name (at most {MaxNameLength} characters).");
                 }
 
-                if (!IsAbsolute(DestinationLocation))
-                {
-                    errors.Add("Choose the destination folder (a full path such as E:\\Backups or \\\\nas\\backups).");
-                }
-                else if (IsAbsolute(SourcePath) && IsSameOrInside(DestinationLocation, SourcePath))
-                {
-                    errors.Add("The destination cannot be inside the folder you back up.");
-                }
+                errors.AddRange(ValidatePlace());
 
                 if (DestinationChoice == DestinationChoice.CreateNew)
                 {
@@ -281,6 +445,80 @@ public sealed class JobDraft
 
         return errors;
     }
+
+    /// <summary>The kind-specific settings of a new or earlier destination.</summary>
+    private List<string> ValidatePlace()
+    {
+        var errors = new List<string>();
+        switch (DestinationType)
+        {
+            case DestinationType.Folder:
+            case DestinationType.NetworkShare:
+                var location = DestinationLocation.Trim();
+                if (DestinationType == DestinationType.NetworkShare && !IsShare(location))
+                {
+                    errors.Add("Enter the share as \\\\server\\share\\folder.");
+                }
+                else if (!IsAbsolute(location))
+                {
+                    errors.Add("Choose the destination folder (a full path such as E:\\Backups or \\\\nas\\backups).");
+                }
+                else if (IsAbsolute(SourcePath) && IsSameOrInside(location, SourcePath))
+                {
+                    errors.Add("The destination cannot be inside the folder you back up.");
+                }
+
+                if (DestinationType == DestinationType.NetworkShare && (ShareUsername.Trim().Length == 0 || SharePassword.Length == 0))
+                {
+                    errors.Add("Enter the account (and its password) the backup service should use for the share.");
+                }
+
+                break;
+            case DestinationType.Sftp:
+                if (SftpHost.Trim().Length == 0 || SftpUsername.Trim().Length == 0 || SftpPath.Trim().Length == 0)
+                {
+                    errors.Add("Enter the SFTP server, the username and the folder on the server.");
+                }
+
+                if (SftpPort is < 1 or > 65535)
+                {
+                    errors.Add("The SFTP port must be 1 to 65535.");
+                }
+
+                if (SftpUseKey ? SftpPrivateKey.Trim().Length == 0 : SftpPassword.Length == 0)
+                {
+                    errors.Add(SftpUseKey ? "Paste the private key." : "Enter the SFTP password.");
+                }
+
+                if (SftpHostKeys.Count == 0)
+                {
+                    errors.Add("Check the server first: CashGear shows its fingerprints so you can make sure it is the right server.");
+                }
+                else if (!SftpHostKeysConfirmed)
+                {
+                    errors.Add("Confirm that the fingerprints match the server.");
+                }
+
+                break;
+            case DestinationType.S3:
+                if (S3Endpoint.Trim().Length == 0 || S3Endpoint.Contains("://", StringComparison.Ordinal) || S3Bucket.Trim().Length == 0)
+                {
+                    errors.Add("Enter the service's endpoint (without https://) and the bucket.");
+                }
+
+                if (S3AccessKeyId.Trim().Length == 0 || S3SecretKey.Length == 0)
+                {
+                    errors.Add("Enter the access key ID and the secret access key.");
+                }
+
+                break;
+        }
+
+        return errors;
+    }
+
+    private static bool IsShare(string path) =>
+        path.StartsWith(@"\\", StringComparison.Ordinal) && path[2..].Split('\\', StringSplitOptions.RemoveEmptyEntries).Length >= 2;
 
     private List<string> ValidateWhen()
     {

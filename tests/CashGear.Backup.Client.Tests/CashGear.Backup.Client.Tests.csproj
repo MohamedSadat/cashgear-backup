@@ -10,6 +10,7 @@
     <Compile Include="..\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
     <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
     <Compile Include="..\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
+    <Compile Include="..\Shared\TestServers.cs" Link="Shared\TestServers.cs" />
     <Compile Include="..\CashGear.Backup.Agent.Tests\Infrastructure\AgentHarness.cs" Link="Shared\AgentHarness.cs" />
   </ItemGroup>
 
