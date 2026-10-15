@@ -70,30 +70,81 @@ repository" with `--no-grpc`; it is harmless.
 
 ## Phase 1 to-do (from these findings)
 
-1. **KopiaProcessHost:** the launch line above. Wait for `SERVER ADDRESS:`, then `GET /api/v1/control/status`.
-   Stop with control shutdown, then close stdin, then kill. Add a Job Object; `--shutdown-on-stdin` should
-   also stop Kopia when the agent dies (pipe closes), but that was not tested.
-2. **REST client:** bootstrap CSRF with `GET /` per server start; on 401 re-fetch the token once.
-   Typed DTOs from [`KopiaDtos.cs`](KopiaDtos.cs) with `[JsonExtensionData]` kept for contract tests.
-3. **Repository create/connect:** poll `/repo/status` until `connected` (finding 1).
-4. **Backup run:** record the snapshot ID by diffing `/snapshots?all=1`. Mark Succeeded only for task
-   `SUCCESS` + exactly one new snapshot + `numFailed == 0` + no `incomplete` (CLAUDE.md rule 5).
-5. **Policy per source,** written on every job change: `scheduling.manual`, compression (zstd),
-   explicit retention, VSS `when-available`, error handling (findings 6 and 7).
-6. **Restore:** always `restoreDirEntryAtDepth = int.MaxValue`, overwrite flags false. Keep a test that
-   fails if any `*.kopia-entry` file appears.
-7. **Progress UI:** hashed/processed counters only (finding 5).
-8. **Error text** includes absolute paths: fine for local logs, scrub before anything leaves the machine.
-9. **Identity:** pick stable `clientOptions.hostname`/`username` for the agent, because sources are keyed by
-   `user@host:path` and a machine rename must not orphan them.
-10. **TLS key file:** written to disk for Kopia; keep it under the SYSTEM/Administrators-only data folder and
-    regenerate it on every start.
+All done in Phase 1a except where noted; the code is in `src/CashGear.Backup.Engine.Kopia`.
+
+1. **KopiaProcessHost:** done (`Hosting/`). Job Object with kill-on-close, health check every 30 s
+   (restart at once if the process exited, after 2 failed checks otherwise), restart with back-off
+   1 s to 60 s, SHA-256 of kopia.exe checked against the pin *before every start*. The pin is embedded
+   in the assembly at build time, and kopia.exe is held open deny-write from the check until the
+   process exists. `--shutdown-on-stdin` stopping Kopia when the agent dies is still untested; the
+   Job Object covers that case and is tested.
+2. **REST client:** done (`Api/`). No proxy, pinned TLS, CSRF re-fetched once on a 401.
+3. **Create/connect** poll `/repo/status`: done.
+4. **Backup run** rule 5: done (`Runs/BackupRunClassifier.cs`), extended with `numIgnoredErrors`, the
+   task's `Errors` counter, and canceled and checkpoint snapshots (Phase 1a #5 and #6 below).
+5. **Policy per source:** done (`Policy/`), written whole, read back, and re-verified before every backup.
+6. **Restore:** done. The contract test `Kopia_default_restore_depth_writes_placeholders_…` keeps the
+   hazard visible, and the engine fails a restore that left any `*.kopia-entry` file.
+7. **Progress:** done, from the `Processed`/`Hashed` counters plus the source's size estimate.
+8. **Error text** with absolute paths: unchanged; still to scrub before anything leaves the machine
+   (Phase 4 support bundle).
+9. **Identity:** `KopiaEngineOptions.ClientHostName` must be a stable id from state.db (Phase 1b).
+10. **TLS key file:** regenerated on every start and deleted as soon as the server answers over TLS.
+
+## Phase 1a: what the engine work found
+
+Observed against the same pinned binary while building the engine (2026-10-15). Each row is covered by
+a test in `tests/CashGear.Backup.Engine.Kopia.IntegrationTests`.
+
+| # | Observed | Consequence |
+|---|---|---|
+| 1 | `PUT /api/v1/policy` **replaces** the whole policy at that level: a PUT with only `retention.keepLatest` clears compression, scheduling and the other retention fields, which then inherit the global defaults | Always PUT every section we own |
+| 2 | Unknown policy fields (a typo like `keepLatst`) are **dropped without an error**; a wrong type (VSS `"when-available"` as a string) gives `400 MALFORMED_REQUEST` | Read the policy back after every write and before every backup |
+| 3 | Any `compressorName` is accepted, even `zstd-nope`. `GET /repo/algorithms` lists the valid ones (`none` is valid but unlisted; `lz4` and `zstd-best-compression` are deprecated) | The engine checks the name against `/repo/algorithms`; we use `zstd-fastest`, `zstd` and `zstd-better-compression` |
+| 4 | Global defaults at v0.23.1: retention 10 latest / 48 hourly / 7 daily / 4 weekly / 24 monthly / 3 annual, compression `none`, VSS never, `ignoreDotFiles: [".kopiaignore"]`. An empty list counts as unset, so `.kopiaignore` cannot be switched off with `[]` | We set `ignoreDotFiles: [".cashgearignore"]` so a stray `.kopiaignore` never excludes data |
+| 5 | **A file that cannot be read** (sharing violation or access denied): task `SUCCESS`, a complete snapshot with `numFailed: 1` and `summary.errors: [{path, error}]` (path relative to the source). With `ignoreFileErrors: true` the same run shows `numFailed: 0`, `numIgnoredErrors: 1` and task counter `Errors: 0` | `ignoreFileErrors` stays false, and rule 5 also requires `numIgnoredErrors == 0`; such runs are `CompletedWithWarnings` with the list |
+| 6 | **Cancel** (`POST /sources/cancel`): the task still ends `SUCCESS`, and Kopia saves a snapshot with `incomplete: "canceled"`. The cancel waits for in-flight pack uploads; a cancel sent before the uploader exists is lost | The classifier maps it to Canceled with no snapshot ID; the engine re-sends the cancel every second until the task ends |
+| 7 | Retention is applied by the server right after each snapshot. With `ignoreIdenticalSnapshots: false` an unchanged source still records a snapshot | Each successful run has exactly one new snapshot. `RetentionRule.KeepLatest` must be at least 1, or the new snapshot could be pruned at once |
+| 8 | **The server runs full maintenance on its own** about 1 s after it opens a repository it owns (after `repo/connect`, and at start with an existing config) when maintenance is due | Contradicts the plan's "our Quartz jobs run maintenance". Decision needed, see below |
+| 9 | `GET /api/v1/objects/{id}` with a malformed ID makes the handler **panic** (empty reply, connection dropped); a well-formed unknown ID gives 404; `rootID/sub` paths give 404 | The client validates IDs (`^I*[g-z]?[0-9a-f]{16,}$`) and walks folders entry by entry |
+| 10 | `POST /restore` accepts `root: "<rootID>/sub/path"`; for a file, `targetPath` is the file to write | Subfolder and single-file restores without an extra API |
+| 11 | Repository errors are HTTP 400 with stable codes: `INVALID_PASSWORD`, `NOT_INITIALIZED`, `ALREADY_INITIALIZED`, `ALREADY_CONNECTED`, `STORAGE_CONNECTION`. `repo/connect` also answers `connected:false` | Mapped to `BackupErrorKind`; poll after connect too |
+| 12 | Server start with an existing config and a wrong `KOPIA_PASSWORD`: exit code 1 with `invalid repository password` before the address line | The host reports `InvalidPassword`; the health check never retries it |
+| 13 | `PUT /repo/throttle {"maxUploadSpeedBytesPerSecond": n}` works and is **persisted** in `repository.config` (`throttlingLimits`) | Tests use it to make cancel deterministic; a future bandwidth setting must reset it explicitly |
+| 14 | VSS `when-available` without elevation logs `vss: do not have Administrators group privileges` and falls back at once | No delay in non-elevated tests; locked files under LocalSystem are still to test (Phase 1b) |
+| 15 | Kopia appends its version to the `<title>` of our stub page (`CashGear v0.23.1`) and injects the CSRF meta tag | Harmless |
+| 16 | The private key can be deleted once the server answers over TLS; requests keep working | The key file lives for about a second per start |
+| 17 | A running `kopia.exe` can be renamed but not written | The pin check before every start catches a binary swapped while the old one runs (tested) |
+| 18 | `Uploaded Bytes` was 28 MB in a throttled run against 204 B in Phase 0 for similar data | Confirms Phase 0 #5: never show it |
 
 ## Not covered yet
 
 - Running as LocalSystem in a Windows Service (cache/log locations, `%LOCALAPPDATA%` defaults avoided by flags).
-- Volume Shadow Copy and locked files; paths over 260 characters; symlinks and junctions.
-- Behaviour when files fail (`numFailed > 0`); research says the server still reports SUCCESS, which rule 5 guards.
-- Maintenance and verification: research says there is no REST endpoint (CLI against the same config), and
-  that `repo/create` makes this server the maintenance owner. Both need a Phase 1 test.
-- SMB, SFTP and S3 destinations.
+- Volume Shadow Copy under LocalSystem and locked files; paths over 260 characters; symlinks and junctions.
+- Verification and maintenance: no REST endpoint, so `IBackupEngine.VerifyAsync` and
+  `RunMaintenanceAsync` throw `NotSupportedException`. Kopia's own server-side maintenance (Phase 1a #8)
+  is the open question.
+- SMB, SFTP and S3 destinations (only `FileSystemDestination` exists).
+- A server restart in the middle of a backup: the engine marks the run Failed; any checkpoint Kopia
+  saved is not inspected.
+
+## Decisions for review (Phase 1b and later)
+
+These touch passwords, deletion, retention or restore (CLAUDE.md rule 10), or change the plan:
+
+1. **Maintenance owner (#8):** either let the Kopia server run its own maintenance and drop the planned
+   Quartz maintenance jobs, or switch Kopia's automatic maintenance off when a repository is created and
+   run ours. Full maintenance deletes unreferenced data, so there must be exactly one owner.
+2. **Default retention** in `RetentionRule.Default`: 10 latest, 7 daily, 4 weekly, 24 monthly, 3 annual,
+   no hourly (Kopia's defaults minus hourly). `KeepLatest >= 1` is enforced.
+3. **Skipped files:** a run with unreadable files is `CompletedWithWarnings` (a usable snapshot exists).
+   Decide whether the dashboard's "last good backup" counts it.
+4. **Password lifetime:** the engine keeps a copy of each repository password in a pinned buffer, zeroed
+   on dispose, for as long as the repository is connected, so it can restart Kopia. `Reveal()` makes
+   short-lived managed strings for `KOPIA_PASSWORD` and the create/connect request body.
+5. **`.cashgearignore`** (#4): users can exclude files by dropping this file into a folder. Document it,
+   or choose a name no one will create by accident.
+6. **One folder per job:** `BackupJob` has one `SourcePath` because Kopia snapshots per folder. A UI job
+   with several folders maps to several engine jobs.
+7. **Connecting with an existing local config** does not compare the config's storage location with the
+   destination passed in; moving a destination needs its own flow (Phase 2).

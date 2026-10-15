@@ -8,8 +8,9 @@ customer sees is .NET 10 C#.
   Snapshot: [docs/plan/2026-10-15-cashgear-backup-plan.md](docs/plan/2026-10-15-cashgear-backup-plan.md).
 - **Verified Kopia behaviour:** [spikes/KopiaSpike/FINDINGS.md](spikes/KopiaSpike/FINDINGS.md). Where it
   disagrees with the plan, FINDINGS wins (it was observed against the pinned binary).
-- **Status:** Foundation + Phase 0 done (Phase 0 gate green, see FINDINGS). Next: Phase 1, engine and
-  agent; start from the "Phase 1 to-do" list in FINDINGS.
+- **Status:** Foundation, Phase 0 and Phase 1a (Kopia engine behind `IBackupEngine`) done; see
+  "Phase 1a" in FINDINGS. Next: Phase 1b, the agent: Windows Service host, SQLite/EF Core, Quartz,
+  gRPC over a named pipe. Open decisions for it are listed at the end of FINDINGS.
 
 ## Architecture
 
@@ -26,7 +27,7 @@ Destination: local disk, SMB, SFTP, S3-compatible
 ```
 
 Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product talks to
-`IBackupEngine` (in Core, added in Phase 1).
+`IBackupEngine` (in Core); `KopiaBackupEngine` implements it.
 
 ## Hard rules
 
@@ -41,8 +42,10 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
 4. **Restore never overwrites by default.** All `overwrite*` flags false, target is a new empty
    folder, and always send `restoreDirEntryAtDepth = int.MaxValue` (Kopia's REST default of 0 writes
    `.kopia-entry` placeholder files instead of real files).
-5. **Never mark a run Succeeded** unless there is a new snapshot ID, `summary.numFailed == 0` and no
-   `incomplete` flag. Kopia's server reports task SUCCESS even when files failed.
+5. **Never mark a run Succeeded** unless there is exactly one new snapshot ID, `summary.numFailed == 0`,
+   `summary.numIgnoredErrors == 0` and no `incomplete` flag. Kopia's server reports task SUCCESS even
+   when files failed and when the run was canceled (`incomplete: "canceled"`). The rule lives in
+   `Runs/BackupRunClassifier.cs`.
 6. **Only the pinned `tools/kopia/kopia.exe`**, verified by SHA-256 against `tools/kopia/kopia.pin.json`.
    Never a kopia from PATH, never a user-supplied one.
 7. **Launching `kopia server start`** (see FINDINGS for why each flag is needed):
@@ -55,7 +58,8 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
      `KOPIA_SERVER_CONTROL_USER/PASSWORD`, `KOPIA_PASSWORD`; set `KOPIA_CHECK_FOR_UPDATES=false`.
      Start from an environment with every inherited `KOPIA_*` variable removed.
 8. **Write the whole Kopia policy for every source** (manual scheduling, compression, retention, VSS).
-   Kopia's defaults do not compress and *do* prune with their own retention.
+   Kopia's defaults do not compress and *do* prune with their own retention. `PUT /policy` replaces the
+   whole policy and silently drops unknown fields, so always read it back (`KopiaPolicyMapper.Differences`).
 9. **After `repo/create` or `repo/connect`, poll `/repo/status`**: the create response says
    `connected:false` even when it succeeded.
 10. **Hand review** anything touching passwords, deletion, retention or restore overwrite. Agent
@@ -72,14 +76,16 @@ dotnet run --project spikes\KopiaSpike -- --keep-workspace
 ```
 
 Tests that need Kopia find it via `CASHGEAR_KOPIA_EXE` or `tools/kopia/kopia.exe` and fail with the
-fetch command if it is missing or does not match the pin.
+fetch command if it is missing or does not match the pin (a new git worktree needs the fetch too). The
+engine tests take about a minute. To debug them, set `CASHGEAR_TEST_LOG_DIR` (one engine log per test,
+passing tests included) and `CASHGEAR_KEEP_TEST_WORKSPACE=1` (keep `%TEMP%\cashgear-tests`).
 
 ## Repo map
 
 | Path | What |
 |---|---|
 | `src/CashGear.Backup.Core` | Domain types and `IBackupEngine` (engine-agnostic) |
-| `src/CashGear.Backup.Engine.Kopia` | The only Kopia-aware code: process host, REST client, DTOs, policy mapping |
+| `src/CashGear.Backup.Engine.Kopia` | The only Kopia-aware code: `KopiaBackupEngine`; `Api/` REST client and DTOs, `Hosting/` process host, pin, Job Object, `Policy/` job-to-policy mapping, `Runs/` run tracking and the rule-5 classifier |
 | `src/CashGear.Backup.Agent` | Windows Service: scheduler, gRPC server, notifications, updater |
 | `src/CashGear.Backup.Data` | EF Core + SQLite state |
 | `src/CashGear.Backup.Contracts` | `.proto` files and generated gRPC types |
@@ -87,7 +93,8 @@ fetch command if it is missing or does not match the pin.
 | `src/CashGear.Backup.Desktop` | WPF host: BlazorWebView, tray icon |
 | `installer/` | WiX MSI (Phase 4; placeholder for now) |
 | `tools/kopia/` | Kopia pin, fetch script, LICENSE (exe is gitignored) |
-| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects |
+| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest) |
+| `tests/CashGear.Backup.Engine.Kopia.IntegrationTests` | `Contract/` one test per Kopia endpoint, `Engine/` round trips and data-safety rules through `IBackupEngine`, `Hosting/` process host, `Unit/` no-Kopia checks |
 | `spikes/KopiaSpike` | Phase 0 throwaway spike and its tests; lift proven code into Engine.Kopia, then delete |
 | `docs/plan/` | Plan snapshots |
 
