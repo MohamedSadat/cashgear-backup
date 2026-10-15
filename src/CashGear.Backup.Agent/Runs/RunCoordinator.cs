@@ -21,11 +21,21 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
 {
     public const string InterruptedMessage = "The agent stopped during this run (shutdown, crash or power loss).";
 
+    /// <summary>Restores into a job's own folder stage here first, inside that folder (same volume, so moves are renames).</summary>
+    public const string StagingPrefix = ".cashgear-restore-";
+
     private readonly ConcurrentDictionary<Guid, ActiveRun> _active = new();
+
+    /// <summary>Jobs whose folder is in use: a backup, or a restore into the job's own folder.</summary>
     private readonly ConcurrentDictionary<Guid, Guid> _activeJobs = new();
+
+    private readonly ConcurrentDictionary<Guid, Guid> _activeVerifies = new();
     private readonly CancellationTokenSource _stopping = new();
 
+    /// <summary>A backup of the job, or a restore into its folder, is running.</summary>
     public bool IsBackupRunning(Guid jobId) => _activeJobs.ContainsKey(jobId);
+
+    public bool IsVerifying(Guid jobId) => _activeVerifies.ContainsKey(jobId);
 
     /// <summary>Marks runs left "running" by a previous agent process as failed.</summary>
     public async Task RecoverInterruptedAsync(CancellationToken ct)
@@ -38,6 +48,13 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
             run.FinishedAt = now;
             run.Message = InterruptedMessage;
             LogInterrupted(logger, run.Id, run.JobId);
+            if (run.Kind == RunKind.Restore && run.JobId is { } jobId && await db.Jobs.FindAsync([jobId], ct) is { } job)
+            {
+                // A restore into the job's folder stopped half way: what it staged is only restored data (still in
+                // the snapshot), and nothing was merged yet or the merge was cut short. Drop the staging folder so
+                // the next backup does not pick it up.
+                DeleteStaging(Path.Combine(job.SourcePath, StagingPrefix + run.Id.ToString("N")));
+            }
         }
 
         await db.SaveChangesAsync(ct);
@@ -57,7 +74,7 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         var run = new RunRecord { Id = Guid.NewGuid(), JobId = jobId, Kind = RunKind.Backup, State = RunState.Running, Trigger = trigger, StartedAt = time.GetUtcNow() };
         if (!_activeJobs.TryAdd(jobId, run.Id))
         {
-            throw new AgentException(AgentError.FailedPrecondition, "A backup of this job is already running.");
+            throw new AgentException(AgentError.FailedPrecondition, "A backup of this job, or a restore into its folder, is already running.");
         }
 
         try
@@ -86,14 +103,23 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         }
     }
 
-    /// <summary>Starts a restore. Unlike backups, a restore the engine refuses (for example a non-empty target) is not recorded.</summary>
-    public async Task<RunRecord> StartRestoreAsync(Guid jobId, string snapshotId, string pathInSnapshot, string targetFolder, CancellationToken ct)
+    /// <summary>
+    /// Starts a restore. Unlike backups, a restore the engine refuses (for example a non-empty target) is not recorded.
+    /// With <paramref name="toOriginal"/> the files go back into the job's folder without replacing anything there
+    /// (see <see cref="KeepBothMerge"/>); <paramref name="targetFolder"/> is then ignored.
+    /// </summary>
+    public async Task<RunRecord> StartRestoreAsync(Guid jobId, string snapshotId, string pathInSnapshot, string targetFolder, bool toOriginal, CancellationToken ct)
     {
         var (job, destination) = await LoadJobAsync(jobId, ct);
         var engine = await engines.ConnectAsync(destination, ct);
         var engineJob = JobMapping.ToEngineJob(job);
         var snapshot = (await engine.ListSnapshotsAsync(engineJob, ct)).FirstOrDefault(s => s.Id == snapshotId)
             ?? throw new AgentException(AgentError.NotFound, $"Snapshot {snapshotId} is not a snapshot of this job.");
+        if (toOriginal)
+        {
+            return await StartRestoreToOriginalAsync(job, engine, snapshot, pathInSnapshot, ct);
+        }
+
         var handle = await engine.RestoreAsync(new RestoreRequest { Snapshot = snapshot, PathInSnapshot = pathInSnapshot, TargetFolder = targetFolder }, ct);
 
         var run = new RunRecord
@@ -106,6 +132,187 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         LogStarted(logger, run.Id, RunKind.Restore, jobId, RunTrigger.Manual);
         return run;
     }
+
+    /// <summary>
+    /// Restores into the job's own folder. The engine restores into a new, empty staging folder inside it (CLAUDE.md
+    /// rule 4 holds for the engine call); once that finished, <see cref="KeepBothMerge"/> moves the files into place
+    /// without replacing anything. The job counts as busy meanwhile, so no backup picks up a half-merged folder.
+    /// </summary>
+    private async Task<RunRecord> StartRestoreToOriginalAsync(JobRecord job, IBackupEngine engine, SnapshotInfo snapshot, string pathInSnapshot, CancellationToken ct)
+    {
+        var segments = SnapshotPath.Split(pathInSnapshot)
+            ?? throw new AgentException(AgentError.InvalidArgument, $"'{pathInSnapshot}' is not a path inside the snapshot.");
+        var isFile = false;
+        if (segments.Count > 0)
+        {
+            var entry = (await engine.BrowseAsync(snapshot, string.Join('/', segments.SkipLast(1)), ct)).FirstOrDefault(e => e.Name == segments[^1])
+                ?? throw new AgentException(AgentError.NotFound, $"{pathInSnapshot} is not in this snapshot.");
+            isFile = entry.Kind != SnapshotEntryKind.Directory;
+        }
+
+        // Where the item lived: a folder's contents merge into that folder, a file into its parent folder.
+        var mergeInto = Path.Combine([job.SourcePath, .. isFile ? segments.SkipLast(1) : segments]);
+        var run = new RunRecord
+        {
+            Id = Guid.NewGuid(), JobId = job.Id, Kind = RunKind.Restore, State = RunState.Running, Trigger = RunTrigger.Manual,
+            StartedAt = time.GetUtcNow(), SnapshotId = snapshot.Id,
+            RestoreTarget = isFile ? Path.Combine(mergeInto, segments[^1]) : mergeInto,
+        };
+        if (!_activeJobs.TryAdd(job.Id, run.Id))
+        {
+            throw new AgentException(AgentError.FailedPrecondition, "A backup of this job is running; restore into its folder once it has finished.");
+        }
+
+        var staging = Path.Combine(job.SourcePath, StagingPrefix + run.Id.ToString("N"));
+        try
+        {
+            try
+            {
+                Directory.CreateDirectory(staging);
+                File.SetAttributes(staging, File.GetAttributes(staging) | FileAttributes.Hidden);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new AgentException(AgentError.FailedPrecondition, $"The job's folder {job.SourcePath} cannot be written to: {ex.Message}");
+            }
+
+            var handle = await engine.RestoreAsync(new RestoreRequest { Snapshot = snapshot, PathInSnapshot = pathInSnapshot, TargetFolder = staging }, ct);
+            await InsertAsync(run, CancellationToken.None);
+            var stamp = time.GetLocalNow().ToString("yyyy-MM-dd HHmm", System.Globalization.CultureInfo.InvariantCulture);
+            Follow(run, handle, engine, busyJobId: job.Id, afterEngine: result => Task.Run(() => FinishRestoreToOriginal(result, staging, mergeInto, stamp)));
+            LogStarted(logger, run.Id, RunKind.Restore, job.Id, RunTrigger.Manual);
+            return run;
+        }
+        catch
+        {
+            _activeJobs.TryRemove(KeyValuePair.Create(job.Id, run.Id));
+            DeleteStaging(staging);
+            throw;
+        }
+    }
+
+    private static RunResult FinishRestoreToOriginal(RunResult result, string staging, string mergeInto, string stamp)
+    {
+        if (result.State is RunState.Failed or RunState.Canceled)
+        {
+            DeleteStaging(staging);
+            return result with { Message = $"{result.Message} Nothing in the job's folder was changed.".Trim() };
+        }
+
+        var merge = KeepBothMerge.Merge(staging, mergeInto, stamp);
+        var message = merge.Describe(mergeInto, stamp);
+        if (Directory.Exists(staging))
+        {
+            // Some items could not be put in place: leave them where the user can find them.
+            File.SetAttributes(staging, File.GetAttributes(staging) & ~FileAttributes.Hidden);
+            message += $" They are still in {staging}.";
+        }
+
+        return result with
+        {
+            State = result.State == RunState.CompletedWithWarnings || merge.Failed.Count > 0 ? RunState.CompletedWithWarnings : RunState.Succeeded,
+            Files = merge.Moved + merge.KeptBoth + merge.Identical,
+            FailedItemCount = result.FailedItemCount + merge.Failed.Count,
+            FailedItems = [.. result.FailedItems, .. merge.Failed],
+            Message = message,
+        };
+    }
+
+    private static void DeleteStaging(string staging)
+    {
+        try
+        {
+            if (Directory.Exists(staging))
+            {
+                Directory.Delete(staging, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next start's cleanup; it only holds restored copies.
+        }
+    }
+
+    /// <summary>
+    /// Checks a job's backups (<see cref="IBackupEngine.VerifyAsync"/>) as a recorded run of kind Verify. One check per
+    /// job at a time; it can run beside a backup.
+    /// </summary>
+    public async Task<RunRecord> StartVerifyAsync(Guid jobId, RunTrigger trigger, double sampleFraction, CancellationToken ct)
+    {
+        var (job, destination) = await LoadJobAsync(jobId, ct);
+        var run = new RunRecord { Id = Guid.NewGuid(), JobId = jobId, Kind = RunKind.Verify, State = RunState.Running, Trigger = trigger, StartedAt = time.GetUtcNow() };
+        if (!_activeVerifies.TryAdd(jobId, run.Id))
+        {
+            throw new AgentException(AgentError.FailedPrecondition, "This job's backups are being checked already.");
+        }
+
+        try
+        {
+            await InsertAsync(run, ct);
+        }
+        catch
+        {
+            _activeVerifies.TryRemove(KeyValuePair.Create(jobId, run.Id));
+            throw;
+        }
+
+        var handle = new RunHandle(run.Id, RunKind.Verify, destination.Id, jobId, run.StartedAt);
+        var active = new ActiveRun(run.Id, null, null, null, handle);
+        _active[run.Id] = active;
+        active.Follower = Task.Run(() => FollowVerifyAsync(active, job, destination, sampleFraction), CancellationToken.None);
+        LogStarted(logger, run.Id, RunKind.Verify, jobId, trigger);
+        return run;
+    }
+
+    private async Task FollowVerifyAsync(ActiveRun active, JobRecord job, DestinationRecord destination, double sampleFraction)
+    {
+        var started = active.Placeholder.StartedAt;
+        RunResult? result;
+        try
+        {
+            if (!EngineHost.IsReachable(destination))
+            {
+                result = Failed($"The destination {destination.Location} is not reachable (disconnected drive or offline share).");
+            }
+            else
+            {
+                var engine = await engines.ConnectAsync(destination, _stopping.Token);
+                var verify = await engine.VerifyAsync(JobMapping.ToEngineJob(job), sampleFraction, _stopping.Token);
+                result = new RunResult
+                {
+                    State = verify.Passed ? RunState.Succeeded : RunState.Failed,
+                    StartedAt = started,
+                    FinishedAt = time.GetUtcNow(),
+                    Files = verify.FilesRead,
+                    Bytes = verify.BytesRead,
+                    FailedItemCount = verify.Errors.Count,
+                    FailedItems = [.. verify.Errors.Select(e => new FailedItem("", e))],
+                    Message = verify.Passed
+                        ? $"No problems found: checked {verify.ItemsChecked:N0} items and read back {verify.FilesRead:N0} files."
+                        : $"The check found {verify.Errors.Count} problem(s) with this job's backups at {destination.Location}.",
+                };
+            }
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            result = null;
+        }
+        catch (BackupEngineException ex)
+        {
+            result = Failed("The check could not run: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            LogFollowFailed(logger, ex, active.RunId);
+            result = Failed("The check could not run; details are in the agent's log.");
+        }
+
+        await SaveAsync(active, result);
+        _activeVerifies.TryRemove(KeyValuePair.Create(job.Id, active.RunId));
+
+        RunResult Failed(string message) => new() { State = RunState.Failed, StartedAt = started, FinishedAt = time.GetUtcNow(), Message = message };
+    }
+
 
     public async Task<(JobRecord Job, DestinationRecord Destination)> LoadJobAsync(Guid jobId, CancellationToken ct)
     {
@@ -120,6 +327,11 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
     {
         if (_active.TryGetValue(runId, out var active))
         {
+            if (active.Engine is null || active.Handle is null)
+            {
+                throw new AgentException(AgentError.FailedPrecondition, "A check of backups cannot be stopped; it ends on its own.");
+            }
+
             await active.Engine.CancelAsync(active.Handle, ct);
             return;
         }
@@ -152,12 +364,21 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
             if (_active.TryGetValue(runId, out var active))
             {
                 RunProgress? last = null;
-                await foreach (var progress in active.Engine.WatchAsync(active.Handle, ct))
+                if (active.Engine is null || active.Handle is null)
                 {
-                    last = progress;
-                    if (progress.Result is null)
+                    // Runs the agent does itself (checks) report no progress beyond "running".
+                    last = new RunProgress { Run = active.Placeholder, State = RunState.Running };
+                    yield return new RunUpdate(runId, last, null);
+                }
+                else
+                {
+                    await foreach (var progress in active.Engine.WatchAsync(active.Handle, ct))
                     {
-                        yield return new RunUpdate(runId, progress, null);
+                        last = progress;
+                        if (progress.Result is null)
+                        {
+                            yield return new RunUpdate(runId, progress, null);
+                        }
                     }
                 }
 
@@ -184,9 +405,11 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         await Task.WhenAll(_active.Values.Select(a => a.Follower)).WaitAsync(TimeSpan.FromSeconds(15)).ContinueWith(_ => { }, TaskScheduler.Default);
     }
 
-    private void Follow(RunRecord run, RunHandle handle, IBackupEngine engine)
+    /// <param name="busyJobId">The job released when the run ends (backups, and restores into the job's folder).</param>
+    /// <param name="afterEngine">Agent-side work after the engine finished (the merge of a restore into the job's folder).</param>
+    private void Follow(RunRecord run, RunHandle handle, IBackupEngine engine, Guid? busyJobId = null, Func<RunResult, Task<RunResult>>? afterEngine = null)
     {
-        var active = new ActiveRun(run.Id, run.Kind == RunKind.Backup ? run.JobId : null, handle, engine);
+        var active = new ActiveRun(run.Id, busyJobId ?? (run.Kind == RunKind.Backup ? run.JobId : null), handle, engine, handle) { AfterEngine = afterEngine };
         _active[run.Id] = active;
         active.Follower = Task.Run(() => FollowAsync(active), CancellationToken.None);
     }
@@ -196,9 +419,14 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         RunResult? result = null;
         try
         {
-            await foreach (var progress in active.Engine.WatchAsync(active.Handle, _stopping.Token))
+            await foreach (var progress in active.Engine!.WatchAsync(active.Handle!, _stopping.Token))
             {
                 result = progress.Result ?? result;
+            }
+
+            if (result is not null && active.AfterEngine is { } after)
+            {
+                result = await after(result);
             }
         }
         catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
@@ -210,6 +438,12 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
             LogFollowFailed(logger, ex, active.RunId);
         }
 
+        await SaveAsync(active, result);
+    }
+
+    /// <summary>Stores the result (null: the agent stopped) and releases the run.</summary>
+    private async Task SaveAsync(ActiveRun active, RunResult? result)
+    {
         try
         {
             await using var db = await dbs.CreateDbContextAsync(CancellationToken.None);
@@ -301,12 +535,17 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
             ?? throw new AgentException(AgentError.NotFound, $"Run {runId} does not exist.");
     }
 
-    private sealed class ActiveRun(Guid runId, Guid? backupJobId, RunHandle handle, IBackupEngine engine)
+    /// <param name="busyJobId">The job this run keeps busy (released when it ends).</param>
+    /// <param name="handle">The engine run; null for runs the agent does itself (checks).</param>
+    /// <param name="placeholder">Identifies the run in progress updates.</param>
+    private sealed class ActiveRun(Guid runId, Guid? busyJobId, RunHandle? handle, IBackupEngine? engine, RunHandle placeholder)
     {
         public Guid RunId { get; } = runId;
-        public Guid? BackupJobId { get; } = backupJobId;
-        public RunHandle Handle { get; } = handle;
-        public IBackupEngine Engine { get; } = engine;
+        public Guid? BackupJobId { get; } = busyJobId;
+        public RunHandle? Handle { get; } = handle;
+        public IBackupEngine? Engine { get; } = engine;
+        public RunHandle Placeholder { get; } = placeholder;
+        public Func<RunResult, Task<RunResult>>? AfterEngine { get; init; }
         public Task Follower { get; set; } = Task.CompletedTask;
 
         /// <summary>Completes once the result is in state.db.</summary>

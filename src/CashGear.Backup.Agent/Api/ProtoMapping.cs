@@ -9,7 +9,7 @@ using Proto = CashGear.Backup.Contracts.V1;
 namespace CashGear.Backup.Agent.Api;
 
 /// <summary>Between the gRPC contract and the agent's own types. Validation beyond shape happens in the services.</summary>
-internal static class ProtoMapping
+internal static partial class ProtoMapping
 {
     public static Proto.Destination ToProto(DestinationRecord destination, DestinationStatus status) => new()
     {
@@ -120,7 +120,7 @@ internal static class ProtoMapping
         {
             Id = run.Id.ToString(),
             JobId = run.JobId?.ToString() ?? "",
-            Kind = run.Kind == RunKind.Restore ? Proto.RunKind.Restore : Proto.RunKind.Backup,
+            Kind = run.Kind switch { RunKind.Restore => Proto.RunKind.Restore, RunKind.Verify => Proto.RunKind.Verify, _ => Proto.RunKind.Backup },
             State = ToProto(run.State),
             Trigger = run.Trigger switch
             {

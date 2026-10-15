@@ -24,6 +24,12 @@ public sealed class AgentOptions
     /// </summary>
     public bool AllowNonElevatedManage { get; set; }
 
+    /// <summary>
+    /// How often the agent starts due checks of backups and emails new alerts. Infinite turns the background loop
+    /// off (tests run it by hand).
+    /// </summary>
+    public TimeSpan HousekeepingInterval { get; set; } = TimeSpan.FromMinutes(5);
+
     /// <summary>Also log to the console when not running as a service.</summary>
     public bool WriteToConsole { get; set; } = true;
 

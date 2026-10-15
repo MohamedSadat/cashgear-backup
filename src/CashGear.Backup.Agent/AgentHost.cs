@@ -5,6 +5,7 @@ using CashGear.Backup.Agent.Destinations;
 using CashGear.Backup.Agent.Engine;
 using CashGear.Backup.Agent.Hosting;
 using CashGear.Backup.Agent.Jobs;
+using CashGear.Backup.Agent.Notifications;
 using CashGear.Backup.Agent.Runs;
 using CashGear.Backup.Agent.Scheduling;
 using CashGear.Backup.Agent.Security;
@@ -67,7 +68,12 @@ public static class AgentHost
         builder.Services.AddSingleton<JobScheduler>();
         builder.Services.AddSingleton<JobService>();
         builder.Services.AddSingleton<DestinationService>();
+        builder.Services.AddSingleton<SettingsStore>();
+        builder.Services.AddSingleton<AlertService>();
+        builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        builder.Services.AddSingleton<Housekeeping>();
         builder.Services.AddHostedService<AgentLifecycle>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<Housekeeping>());
 
         var app = builder.Build();
         app.MapGrpcService<BackupAgentService>();

@@ -4,6 +4,9 @@ public enum RunKind
 {
     Backup,
     Restore,
+
+    /// <summary>A check of a job's backups (<see cref="IBackupEngine.VerifyAsync"/>), recorded by the agent.</summary>
+    Verify,
 }
 
 public enum RunState

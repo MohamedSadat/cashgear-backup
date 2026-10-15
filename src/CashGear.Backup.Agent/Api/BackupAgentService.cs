@@ -2,8 +2,10 @@ using CashGear.Backup.Agent.Destinations;
 using CashGear.Backup.Agent.Engine;
 using CashGear.Backup.Agent.Hosting;
 using CashGear.Backup.Agent.Jobs;
+using CashGear.Backup.Agent.Notifications;
 using CashGear.Backup.Agent.Runs;
 using CashGear.Backup.Agent.Security;
+using CashGear.Backup.Core;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Proto = CashGear.Backup.Contracts.V1;
@@ -20,7 +22,10 @@ internal sealed class BackupAgentService(
     DestinationService destinations,
     JobService jobs,
     RunCoordinator runs,
-    EngineHost engines) : Proto.BackupAgent.BackupAgentBase
+    EngineHost engines,
+    SettingsStore settings,
+    AlertService alerts,
+    IEmailSender email) : Proto.BackupAgent.BackupAgentBase
 {
     public override Task<Proto.AgentStatus> GetStatus(Proto.GetStatusRequest request, ServerCallContext context)
     {
@@ -127,18 +132,105 @@ internal sealed class BackupAgentService(
     public override async Task<Proto.BrowseSnapshotResponse> BrowseSnapshot(Proto.BrowseSnapshotRequest request, ServerCallContext context)
     {
         auth.Require(context, AccessLevel.Read);
-        var (job, destination) = await runs.LoadJobAsync(AgentException.ParseId(request.JobId, "job"), context.CancellationToken);
-        var engine = await engines.ConnectAsync(destination, context.CancellationToken);
-        var snapshot = (await engine.ListSnapshotsAsync(JobMapping.ToEngineJob(job), context.CancellationToken)).FirstOrDefault(s => s.Id == request.SnapshotId)
-            ?? throw new AgentException(AgentError.NotFound, $"Snapshot {request.SnapshotId} is not a snapshot of this job.");
+        var (engine, snapshot) = await SnapshotAsync(request.JobId, request.SnapshotId, context.CancellationToken);
         var entries = await engine.BrowseAsync(snapshot, request.Path, context.CancellationToken);
         return new Proto.BrowseSnapshotResponse { Entries = { entries.Select(ProtoMapping.ToProto) } };
+    }
+
+    public override async Task SearchSnapshot(Proto.SearchSnapshotRequest request, IServerStreamWriter<Proto.SearchSnapshotResponse> responseStream, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Read);
+        var query = request.Query.Trim();
+        if (query.Length is < 2 or > 200)
+        {
+            throw new AgentException(AgentError.InvalidArgument, "Search for 2 to 200 characters of a name.");
+        }
+
+        var maxResults = request.MaxResults <= 0 ? 200 : Math.Min(request.MaxResults, 1000);
+        var (engine, snapshot) = await SnapshotAsync(request.JobId, request.SnapshotId, context.CancellationToken);
+        await foreach (var batch in SnapshotSearch.SearchAsync(engine, snapshot, query, maxResults, context.CancellationToken))
+        {
+            await responseStream.WriteAsync(new Proto.SearchSnapshotResponse
+            {
+                Matches = { batch.Matches.Select(ProtoMapping.ToProto) },
+                Done = batch.Done,
+                Truncated = batch.Truncated,
+                FoldersSearched = batch.FoldersSearched,
+            }, context.CancellationToken);
+        }
     }
 
     public override async Task<Proto.Run> StartRestore(Proto.StartRestoreRequest request, ServerCallContext context)
     {
         auth.Require(context, AccessLevel.Manage);
-        var run = await runs.StartRestoreAsync(AgentException.ParseId(request.JobId, "job"), request.SnapshotId, request.Path, request.TargetFolder, context.CancellationToken);
+        var run = await runs.StartRestoreAsync(AgentException.ParseId(request.JobId, "job"), request.SnapshotId, request.Path, request.TargetFolder,
+            toOriginal: request.Location == Proto.RestoreLocation.Original, context.CancellationToken);
         return ProtoMapping.ToProto(run);
+    }
+
+    public override async Task<Proto.Run> VerifyJobNow(Proto.VerifyJobNowRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Operate);
+        var current = await settings.LoadAsync(context.CancellationToken);
+        var run = await runs.StartVerifyAsync(AgentException.ParseId(request.JobId, "job"), Data.RunTrigger.Manual, current.VerifySamplePercent / 100, context.CancellationToken);
+        return ProtoMapping.ToProto(run);
+    }
+
+    public override async Task<Proto.ListAlertsResponse> ListAlerts(Proto.ListAlertsRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Read);
+        return new Proto.ListAlertsResponse { Alerts = { (await alerts.ListAsync(context.CancellationToken)).Select(ProtoMapping.ToProto) } };
+    }
+
+    public override async Task<Proto.Settings> GetSettings(Proto.GetSettingsRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Read);
+        return ProtoMapping.ToProto(await settings.LoadAsync(context.CancellationToken));
+    }
+
+    public override async Task<Proto.Settings> UpdateSettings(Proto.UpdateSettingsRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Manage);
+        var update = ProtoMapping.FromProto(request.Settings);
+        using (update.NewPassword)
+        {
+            return ProtoMapping.ToProto(await settings.SaveAsync(update, context.CancellationToken));
+        }
+    }
+
+    /// <summary>Manage: it makes the agent (LocalSystem) connect to a server the caller names.</summary>
+    public override async Task<Proto.SendTestEmailResponse> SendTestEmail(Proto.SendTestEmailRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Manage);
+        var (config, given) = ProtoMapping.FromProto(request.Email);
+        using (given)
+        {
+            var saved = await settings.LoadAsync(context.CancellationToken);
+            using var stored = given is null && config.Username.Length > 0 ? settings.EmailPassword(saved) : null;
+            var errors = SettingsStore.ValidateEmail(config with { ProtectedPassword = null }, requireComplete: true);
+            if (config.Security == SmtpSecurityMode.None && (given ?? stored) is not null && errors.Count == 0)
+            {
+                errors.Add("Without encryption the email password would cross the network readable: choose STARTTLS or TLS.");
+            }
+
+            if (errors.Count > 0)
+            {
+                throw new AgentException(AgentError.InvalidArgument, string.Join(" ", errors));
+            }
+
+            var (subject, body) = Housekeeping.TestEmail();
+            await email.SendAsync(config, given ?? stored, subject, body, context.CancellationToken);
+        }
+
+        return new Proto.SendTestEmailResponse();
+    }
+
+    private async Task<(IBackupEngine Engine, SnapshotInfo Snapshot)> SnapshotAsync(string jobId, string snapshotId, CancellationToken ct)
+    {
+        var (job, destination) = await runs.LoadJobAsync(AgentException.ParseId(jobId, "job"), ct);
+        var engine = await engines.ConnectAsync(destination, ct);
+        var snapshot = (await engine.ListSnapshotsAsync(JobMapping.ToEngineJob(job), ct)).FirstOrDefault(s => s.Id == snapshotId)
+            ?? throw new AgentException(AgentError.NotFound, $"Snapshot {snapshotId} is not a snapshot of this job.");
+        return (engine, snapshot);
     }
 }
