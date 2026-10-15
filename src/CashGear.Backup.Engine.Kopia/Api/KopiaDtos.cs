@@ -162,8 +162,12 @@ internal sealed record TaskListResponse : KopiaResponse
 /// <summary>A directory object from <c>GET /api/v1/objects/{id}</c>.</summary>
 internal sealed record DirectoryManifest : KopiaResponse
 {
+    private readonly List<DirectoryEntry> _entries = [];
+
     public string? Stream { get; init; }
-    public List<DirectoryEntry> Entries { get; init; } = [];
+
+    /// <summary>Kopia writes <c>"entries": null</c> for an empty folder.</summary>
+    public List<DirectoryEntry> Entries { get => _entries; init => _entries = value ?? []; }
     public SnapshotSummary? Summary { get; init; }
 }
 
