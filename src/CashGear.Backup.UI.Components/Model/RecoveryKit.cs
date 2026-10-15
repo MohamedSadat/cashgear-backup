@@ -22,6 +22,13 @@ public static class RecoveryKit
     private const int BodyChars = 86;
     private const int MonoChars = 72;
 
+    /// <summary>"CashGear Recovery Kit - Backup disk.pdf", with characters Windows does not allow in names replaced.</summary>
+    public static string FileName(string destinationName)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return $"CashGear Recovery Kit - {new string([.. destinationName.Select(c => invalid.Contains(c) ? '_' : c)]).Trim()}.pdf";
+    }
+
     /// <summary>The page uses WinAnsi fonts: printable ASCII and Latin-1 only.</summary>
     public static bool CanPrint(string text) => text.All(IsPrintable);
 

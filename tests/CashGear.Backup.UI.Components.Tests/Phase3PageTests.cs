@@ -52,7 +52,8 @@ public class RestoreWizardTests : UiTest
         cut.Find("#search").Change("a.txt");
         await cut.Find("#search-go").ClickAsync(new());
 
-        cut.WaitForAssertion(() => Assert.Contains("docs/a.txt", cut.Find(".search-results").TextContent, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Equal("a.txt", cut.Find(".search-results .result .name").TextContent.Trim()));
+        Assert.Contains("docs", cut.Find(".search-results .result").TextContent, StringComparison.Ordinal);
         Assert.True(Agent.Called("SearchSnapshot:s3/a.txt"));
         Assert.Contains("1 found", cut.Find("#search-status").TextContent, StringComparison.Ordinal);
         cut.Find(".search-results input.pick").Change(true);

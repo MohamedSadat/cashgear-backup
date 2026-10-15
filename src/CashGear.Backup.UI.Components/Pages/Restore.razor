@@ -4,7 +4,8 @@
 @inject IDesktopShell Shell
 @inject TimeProvider Time
 
-@* Restore: pick a restore point, browse it, pick what to restore, restore into a new or empty folder. Never overwrites. *@
+@* Restore: pick a restore point (grouped by day), browse or search it, pick what to restore, and restore into a new
+   or empty folder or back where it came from (keeping both versions). Nothing is ever replaced. *@
 
 <div class="page-head">
     <h1>Restore files@(_job is null ? "" : $" from {_job.Spec.Name}")</h1>
@@ -33,25 +34,29 @@
                     <tr><th>Taken</th><th class="num">Files</th><th class="num">Size</th><th>Notes</th><th></th></tr>
                 </thead>
                 <tbody>
-                    @foreach (var snapshot in VisibleSnapshots)
+                    @foreach (var day in VisibleSnapshots.GroupBy(s => Format.Day(s.EndTime ?? s.StartTime, Time)))
                     {
-                        <tr class="snapshot">
-                            <td>@Format.When(snapshot.EndTime ?? snapshot.StartTime, Time)</td>
-                            <td class="num">@Format.Count(snapshot.Files, "file", "files")</td>
-                            <td class="num">@Format.Bytes(snapshot.Bytes)</td>
-                            <td>
-                                @if (!snapshot.Complete)
-                                {
-                                    <span class="badge badge-warn">Incomplete</span>
-                                    <span class="muted">@snapshot.IncompleteReason</span>
-                                }
-                                @if (snapshot.FailedItemCount > 0)
-                                {
-                                    <span class="badge badge-warn">@Format.Count(snapshot.FailedItemCount, "item", "items") skipped</span>
-                                }
-                            </td>
-                            <td><button type="button" class="button choose" @onclick="() => Choose(snapshot)">Browse</button></td>
-                        </tr>
+                        <tr class="day"><th colspan="5">@day.Key</th></tr>
+                        @foreach (var snapshot in day)
+                        {
+                            <tr class="snapshot">
+                                <td>@Format.When(snapshot.EndTime ?? snapshot.StartTime, Time)</td>
+                                <td class="num">@Format.Count(snapshot.Files, "file", "files")</td>
+                                <td class="num">@Format.Bytes(snapshot.Bytes)</td>
+                                <td>
+                                    @if (!snapshot.Complete)
+                                    {
+                                        <span class="badge badge-warn">Incomplete</span>
+                                        <span class="muted">@snapshot.IncompleteReason</span>
+                                    }
+                                    @if (snapshot.FailedItemCount > 0)
+                                    {
+                                        <span class="badge badge-warn">@Format.Count(snapshot.FailedItemCount, "item", "items") skipped</span>
+                                    }
+                                </td>
+                                <td><button type="button" class="button choose" @onclick="() => Choose(snapshot)">Browse</button></td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
@@ -69,15 +74,72 @@ else
         <button type="button" class="link" @onclick="BackToList" disabled="@_busy">Choose another</button>
     </p>
 
-    <SnapshotBrowser JobId="@JobId" SnapshotId="@_snapshot.Id" @bind-Folder="_folder" @bind-Selected="_selected" Disabled="_busy" />
+    <div class="search-bar">
+        <input id="search" type="search" placeholder="Find files or folders by name" value="@_query" @onchange="e => _query = e.Value?.ToString() ?? string.Empty" disabled="@_busy" />
+        <button type="button" id="search-go" class="button" @onclick="SearchAsync" disabled="@(_searching || _busy)">Search</button>
+        @if (_results is not null)
+        {
+            <button type="button" id="search-clear" class="link" @onclick="ClearSearch">Back to folders</button>
+        }
+    </div>
+
+    @if (_results is not null)
+    {
+        <p id="search-status" class="hint">@SearchStatus</p>
+        @if (_results.Count > 0)
+        {
+            <table class="search-results entries">
+                <thead>
+                    <tr><th><span class="sr-only">Restore</span></th><th>Name</th><th>In folder</th><th class="num">Size</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _results)
+                    {
+                        <tr class="result">
+                            <td><input type="radio" name="pick" class="pick" checked="@(_selected == entry.Path)" @onchange="() => _selected = entry.Path" disabled="@_busy" aria-label="Restore @entry.Name" /></td>
+                            <td><span class="name">@entry.Name</span></td>
+                            <td class="muted">@Parent(entry.Path)</td>
+                            <td class="num">@(entry.Kind == EntryKind.File ? Format.Bytes(entry.Size) : "")</td>
+                            <td><button type="button" class="link show-folder" @onclick="() => ShowFolder(entry)">Show folder</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+    else
+    {
+        <SnapshotBrowser JobId="@JobId" SnapshotId="@_snapshot.Id" @bind-Folder="_folder" @bind-Selected="_selected" Disabled="_busy" />
+    }
 
     <section class="restore-panel">
         <p class="selection">Restore: <strong>@SelectionText</strong></p>
-        <div class="field">
-            <label for="restore-target">Into folder</label>
-            <FolderField Id="restore-target" Title="Choose a new or empty folder to restore into" @bind-Value="_target" Disabled="_busy" />
-        </div>
-        <p id="restore-note" class="hint">CashGear Backup restores into a new or empty folder and never overwrites existing files.</p>
+        <fieldset class="choices">
+            <legend class="sr-only">Where to restore</legend>
+            <label class="choice">
+                <input type="radio" id="to-new-folder" name="restore-location" checked="@(!_toOriginal)" @onchange="() => _toOriginal = false" disabled="@_busy" />
+                Into a new folder (recommended)
+            </label>
+            <label class="choice">
+                <input type="radio" id="to-original" name="restore-location" checked="@_toOriginal" @onchange="() => _toOriginal = true" disabled="@_busy" />
+                Back where it came from@(_job is null ? "" : $", in {_job.Spec.SourcePath}")
+            </label>
+        </fieldset>
+        @if (_toOriginal)
+        {
+            <p id="original-note" class="hint">
+                Missing files come back. A file that is there and different is kept, and the restored copy is saved next to it
+                with "(restored" and the date in its name. Identical files are left as they are. Nothing is replaced.
+            </p>
+        }
+        else
+        {
+            <div class="field">
+                <label for="restore-target">Into folder</label>
+                <FolderField Id="restore-target" Title="Choose a new or empty folder to restore into" @bind-Value="_target" Disabled="_busy" />
+            </div>
+            <p id="restore-note" class="hint">CashGear Backup restores into a new or empty folder and never overwrites existing files.</p>
+        }
         <ElevationNote />
         <ErrorBox Message="@_error" />
 
@@ -103,6 +165,8 @@ else
 }
 
 @code {
+    private const int MaxSearchResults = 200;
+
     private readonly CancellationTokenSource _cts = new();
     private Job? _job;
     private IReadOnlyList<Snapshot>? _snapshots;
@@ -111,8 +175,14 @@ else
     private string _folder = "";
     private string _selected = "";
     private string _target = "";
+    private bool _toOriginal;
+    private string _query = "";
+    private List<SnapshotEntry>? _results;
+    private bool _searching;
+    private bool _truncated;
     private RunProgress? _progress;
     private Run? _finished;
+    private bool _finishedToOriginal;
     private string? _loadError;
     private string? _error;
     private bool _busy;
@@ -124,6 +194,10 @@ else
     private List<Snapshot> VisibleSnapshots => [.. (_snapshots ?? []).Where(s => s.Complete || _showIncomplete)];
 
     private string SelectionText => _selected.Length == 0 ? "everything in this restore point" : _selected;
+
+    private string SearchStatus => _searching ? "Searching…"
+        : _results is not { Count: > 0 } ? "Nothing found."
+        : $"{_results.Count} found" + (_truncated ? "; only the first ones are shown, search for more of the name to narrow it down." : ".");
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,6 +226,8 @@ else
         _snapshot = snapshot;
         _folder = "";
         _selected = "";
+        _results = null;
+        _query = "";
         _target = Path.Combine(Shell.DefaultRestoreParent, $"{SafeName(_job!.Spec.Name)} {Format.Stamp(snapshot.EndTime ?? snapshot.StartTime, Time)}");
         _progress = null;
         _finished = null;
@@ -165,12 +241,57 @@ else
         _error = null;
     }
 
+    private async Task SearchAsync()
+    {
+        var query = _query.Trim();
+        if (query.Length < 2)
+        {
+            _error = "Type at least 2 characters of the name.";
+            return;
+        }
+
+        _error = null;
+        _results = [];
+        _truncated = false;
+        _searching = true;
+        try
+        {
+            await foreach (var response in Agent.SearchSnapshotAsync(JobId, _snapshot!.Id, query, MaxSearchResults, _cts.Token))
+            {
+                _results.AddRange(response.Matches);
+                _truncated |= response.Truncated;
+                StateHasChanged();
+            }
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private void ClearSearch() => _results = null;
+
+    /// <summary>Opens the folder that holds a found item, with the item picked.</summary>
+    private void ShowFolder(SnapshotEntry entry)
+    {
+        _folder = Parent(entry.Path);
+        _selected = entry.Path;
+        _results = null;
+    }
+
     private async Task StartAsync()
     {
         _error = null;
         _finished = null;
         var target = _target.Trim();
-        if (target.Length == 0 || !Path.IsPathFullyQualified(target))
+        if (!_toOriginal && (target.Length == 0 || !Path.IsPathFullyQualified(target)))
         {
             _error = "Choose the folder to restore into: a full path such as C:\\Users\\you\\Restored.";
             return;
@@ -184,8 +305,10 @@ else
                 JobId = JobId,
                 SnapshotId = _snapshot!.Id,
                 Path = _selected,
-                TargetFolder = target,
+                TargetFolder = _toOriginal ? "" : target,
+                Location = _toOriginal ? RestoreLocation.Original : RestoreLocation.NewFolder,
             }, _cts.Token);
+            _finishedToOriginal = _toOriginal;
             _progress = new RunProgress { RunId = run.Id, State = run.State };
             _ = FollowAsync(run.Id, _cts.Token);
         }
@@ -238,13 +361,17 @@ else
         });
     }
 
-    private static string ResultText(Run run) => run.State switch
+    private string ResultText(Run run) => run.State switch
     {
+        // Back in place: the agent says what was brought back, kept and left alone.
+        RunState.Succeeded or RunState.CompletedWithWarnings when _finishedToOriginal && !string.IsNullOrEmpty(run.Message) => run.Message,
         RunState.Succeeded => $"Restored {Format.Count(run.Files, "file", "files")} ({Format.Bytes(run.Bytes)}) into {run.RestoreTarget}.",
         RunState.CompletedWithWarnings => $"Restored {Format.Count(run.Files, "file", "files")} into {run.RestoreTarget}, but some items could not be restored.",
         RunState.Canceled => $"The restore was canceled. What was restored so far is in {run.RestoreTarget}.",
         _ => $"The restore failed. {run.Message}",
     };
+
+    private static string Parent(string path) => path.LastIndexOf('/') is var slash and > 0 ? path[..slash] : "";
 
     private static string SafeName(string name)
     {

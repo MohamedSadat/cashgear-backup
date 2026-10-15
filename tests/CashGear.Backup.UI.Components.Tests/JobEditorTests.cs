@@ -15,6 +15,7 @@ public class JobEditorTests : UiTest
     public async Task Sets_up_a_new_destination_and_the_job()
     {
         await ConnectAsync();
+        Navigation.NavigateTo("jobs/new");
         var cut = Render<JobEditor>();
 
         FillWhat(cut, excludes: "*.tmp\n\n  node_modules/  \n");

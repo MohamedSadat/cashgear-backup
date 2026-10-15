@@ -62,6 +62,24 @@
                     }
                 </dd>
             </div>
+            <div>
+                <dt>Last check of the backups</dt>
+                <dd class="last-check">
+                    @if (Checking)
+                    {
+                        <span class="badge badge-info">Checking…</span>
+                    }
+                    else if (LastCheck is { } check)
+                    {
+                        <span class="badge badge-@(check.State == RunState.Succeeded ? "ok" : "error")">@(check.State == RunState.Succeeded ? "No problems found" : "Problems found")</span>
+                        <span class="when">@Format.When(check.FinishedAt ?? check.StartedAt, Time)</span>
+                    }
+                    else
+                    {
+                        <span>Not checked yet</span>
+                    }
+                </dd>
+            </div>
         </dl>
         @if (Job.LastRun is { State: RunState.CompletedWithWarnings } warned)
         {
@@ -81,6 +99,7 @@
         {
             <button type="button" class="button cancel" @onclick="OnCancel">Cancel</button>
         }
+        <button type="button" class="button verify-now" disabled="@(!CanRun || Checking)" @onclick="OnVerifyNow">Check backups</button>
         <a class="button" href="jobs/@Job.Id/restore">Restore files</a>
         <a class="button" href="jobs/@Job.Id/history">History</a>
         <a class="button" href="jobs/@Job.Id/edit">Change</a>
@@ -104,6 +123,17 @@
 
     [Parameter]
     public string? Error { get; set; }
+
+    /// <summary>The latest finished check of the job's backups.</summary>
+    [Parameter]
+    public Run? LastCheck { get; set; }
+
+    /// <summary>A check of this job is running.</summary>
+    [Parameter]
+    public bool Checking { get; set; }
+
+    [Parameter]
+    public EventCallback OnVerifyNow { get; set; }
 
     /// <summary>Whether the agent is ready to start a backup.</summary>
     [Parameter]

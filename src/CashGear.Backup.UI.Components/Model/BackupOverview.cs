@@ -11,10 +11,37 @@ public enum OverviewLevel
     Problem,
 }
 
+/// <summary>How serious each kind of alert is.</summary>
+public static class Alerts
+{
+    public static bool IsProblem(AlertKind kind) => kind is AlertKind.VerifyFailed or AlertKind.BackupFailed;
+
+    public static int Rank(AlertKind kind) => kind switch
+    {
+        AlertKind.VerifyFailed => 0,
+        AlertKind.BackupFailed => 1,
+        AlertKind.NoRecentBackup => 2,
+        _ => 3,
+    };
+
+    /// <summary>The badge or panel style: error or warn.</summary>
+    public static string Tone(AlertKind kind) => IsProblem(kind) ? "error" : "warn";
+}
+
 /// <summary>One line about all backups, for the tray icon.</summary>
 public sealed record BackupOverview(OverviewLevel Level, string Text)
 {
-    public static BackupOverview Summarize(AgentConnection connection, IReadOnlyList<Job>? jobs, IReadOnlyList<Alert> alerts) => Summarize(connection, jobs);
+    /// <summary>Once the agent is ready, its alerts decide: the most serious one is shown.</summary>
+    public static BackupOverview Summarize(AgentConnection connection, IReadOnlyList<Job>? jobs, IReadOnlyList<Alert>? alerts)
+    {
+        if (connection != AgentConnection.Ready || alerts is not { Count: > 0 })
+        {
+            return Summarize(connection, jobs);
+        }
+
+        var top = alerts.OrderBy(a => Alerts.Rank(a.Kind)).First();
+        return new(Alerts.IsProblem(top.Kind) ? OverviewLevel.Problem : OverviewLevel.Warning, $"{top.JobName}: {top.Message}");
+    }
 
     public static BackupOverview Summarize(AgentConnection connection, IReadOnlyList<Job>? jobs)
     {

@@ -3,6 +3,9 @@
 @implements IDisposable
 @inject IAgentClient Agent
 @inject NavigationManager Navigation
+@inject AgentMonitor Monitor
+@inject IDesktopShell Shell
+@inject TimeProvider Time
 
 @* The job wizard: what, where, when, how long, review. Editing skips "where": a job's folder and destination are fixed. *@
 
@@ -18,6 +21,28 @@
 else if (_draft is null)
 {
     <p class="muted">Loading…</p>
+}
+else if (_newDestination is not null && _jobCreated)
+{
+    <section id="recovery-kit-panel" class="wizard-step">
+        <h2>Your backup is set up</h2>
+        <p>
+            Save your Recovery Kit now: one page with where your backups are and how to get them back on another PC.
+            Print it, or keep it on a USB stick, away from this computer.
+        </p>
+        <label class="choice">
+            <input type="checkbox" id="kit-include-password" checked="@_kitIncludePassword" @onchange="e => _kitIncludePassword = e.Value is true" />
+            Put the password on the page too (anyone who finds the page can then open your backups)
+        </label>
+        <div class="actions">
+            <button type="button" id="save-kit" class="button primary" @onclick="SaveKitAsync">Save Recovery Kit…</button>
+            <button type="button" id="done" class="button" @onclick="Done">Done</button>
+        </div>
+        @if (_kitSaved is not null)
+        {
+            <p id="kit-saved" class="hint">Saved to @_kitSaved.</p>
+        }
+    </section>
 }
 else
 {
@@ -290,6 +315,14 @@ else
     private bool _busy;
     private bool _confirmDelete;
 
+    // A destination this wizard created: offered as a Recovery Kit once the job exists. Its password stays in
+    // memory only until the kit page is left.
+    private Destination? _newDestination;
+    private string? _kitPassword;
+    private bool _jobCreated;
+    private bool _kitIncludePassword;
+    private string? _kitSaved;
+
     /// <summary>Set when changing an existing job.</summary>
     [Parameter]
     public string? JobId { get; set; }
@@ -453,6 +486,11 @@ else
             {
                 var destinationId = await EnsureDestinationAsync(draft);
                 await Agent.CreateJobAsync(draft.ToSpec(destinationId), _cts.Token);
+                if (_newDestination is not null)
+                {
+                    _jobCreated = true;
+                    return;
+                }
             }
 
             Navigation.NavigateTo("");
@@ -488,6 +526,8 @@ else
                     Location = draft.DestinationLocation.Trim(),
                     Password = draft.Password,
                 }, _cts.Token);
+                _newDestination = destination;
+                _kitPassword = draft.Password;
                 break;
             case DestinationChoice.ConnectExisting:
                 destination = await Agent.ConnectDestinationAsync(new ConnectDestinationRequest
@@ -507,6 +547,23 @@ else
         draft.DestinationId = destination.Id;
         draft.ForgetPasswords();
         return destination.Id;
+    }
+
+    private async Task SaveKitAsync()
+    {
+        var destination = _newDestination!;
+        var kit = RecoveryKit.Create(new RecoveryKitInfo(destination.Name, destination.Location, Environment.MachineName,
+            Monitor.Status?.MachineIdentity ?? "", Time.GetLocalNow())
+        {
+            Password = _kitIncludePassword ? _kitPassword : null,
+        });
+        _kitSaved = await Shell.SaveFileAsync(RecoveryKit.FileName(destination.Name), kit, _cts.Token) ?? _kitSaved;
+    }
+
+    private void Done()
+    {
+        _kitPassword = null;
+        Navigation.NavigateTo("");
     }
 
     private async Task DeleteAsync()
@@ -534,6 +591,7 @@ else
     public void Dispose()
     {
         _draft?.ForgetPasswords();
+        _kitPassword = null;
         _cts.Cancel();
         _cts.Dispose();
     }

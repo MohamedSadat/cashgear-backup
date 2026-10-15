@@ -51,6 +51,22 @@ public static class Format
         };
     }
 
+    /// <summary>A day heading: "Today", "Yesterday", "Monday 12 Oct", "1 Oct 2026".</summary>
+    public static string Day(Timestamp timestamp, TimeProvider time)
+    {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(time);
+        var day = TimeZoneInfo.ConvertTime(timestamp.ToDateTimeOffset(), time.LocalTimeZone).Date;
+        var today = TimeZoneInfo.ConvertTime(time.GetUtcNow(), time.LocalTimeZone).Date;
+        return (today - day).Days switch
+        {
+            0 => "Today",
+            1 => "Yesterday",
+            > 1 and < 7 => day.ToString("dddd d MMM", s_culture),
+            _ => day.ToString("d MMM yyyy", s_culture),
+        };
+    }
+
     /// <summary>The local date and time as a sortable stamp, for folder names: "2026-10-15 1432".</summary>
     public static string Stamp(Timestamp timestamp, TimeProvider time)
     {

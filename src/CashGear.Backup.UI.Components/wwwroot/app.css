@@ -169,3 +169,16 @@ td p { margin: 0 0 4px; }
 .restore-panel { margin-top: 10px; }
 .result { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); }
 .result p { margin: 6px 0; }
+
+/* Phase 3: alerts, timeline, search, Recovery Kits */
+.alerts { display: grid; gap: 8px; margin-bottom: 14px; }
+.alert { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 10px 12px; border-radius: var(--radius); }
+.alert-error { background: var(--error-bg); color: var(--error); }
+.alert-warn { background: var(--warn-bg); color: var(--warn); }
+.alert .muted { color: inherit; opacity: .75; }
+.snapshots tr.day th { background: var(--surface-2); color: var(--text); font-size: 13px; }
+.search-bar { display: flex; gap: 8px; align-items: center; margin: 10px 0; max-width: 640px; }
+.search-bar input { flex: 1; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.search-results { margin-bottom: 14px; }
+.kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.kit-row > span:first-child { flex: 1; }

@@ -33,6 +33,11 @@
                             {
                                 <span>Restore</span>
                             }
+                            else if (run.Kind == RunKind.Verify)
+                            {
+                                <span>Check</span>
+                                <span class="muted">@Format.Trigger(run.Trigger)</span>
+                            }
                             else
                             {
                                 <span>Backup</span>
