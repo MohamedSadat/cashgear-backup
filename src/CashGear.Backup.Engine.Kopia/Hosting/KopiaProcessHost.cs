@@ -27,6 +27,12 @@ internal sealed record KopiaProcessHostOptions
 
     /// <summary>How long callers wait for a restart in progress before getting EngineUnavailable.</summary>
     public TimeSpan ReadyWaitTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Storage credentials Kopia reads from its environment (S3 keys), so they never land in repository.config.
+    /// The host owns these and disposes them with itself.
+    /// </summary>
+    public IReadOnlyDictionary<string, SecureSecret> StorageEnvironment { get; init; } = new Dictionary<string, SecureSecret>();
 }
 
 internal enum KopiaHostState
@@ -172,7 +178,7 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
                 throw new BackupEngineException(BackupErrorKind.RepositoryNotConnected, $"Repository {_options.Name} is not connected.");
             }
 
-            return await KopiaCommand.RunAsync(_options.KopiaExePath, _options.Pin, _options.Layout.Root, arguments, password, _logger, ct);
+            return await KopiaCommand.RunAsync(_options.KopiaExePath, _options.Pin, _options.Layout.Root, arguments, password, _options.StorageEnvironment, _logger, ct);
         }
     }
 
@@ -256,6 +262,21 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        try
+        {
+            await DisposeProcessAsync();
+        }
+        finally
+        {
+            foreach (var secret in _options.StorageEnvironment.Values)
+            {
+                secret.Dispose();
+            }
+        }
+    }
+
+    private async ValueTask DisposeProcessAsync()
+    {
         if (State is KopiaHostState.Running or KopiaHostState.Restarting or KopiaHostState.Faulted)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -303,7 +324,10 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
             try
             {
                 process = await KopiaServerProcess.StartAsync(
-                    new KopiaServerStartInfo(_options.KopiaExePath, _options.Layout, _options.HtmlDirectory, certificate, credentials, password, _options.Name),
+                    new KopiaServerStartInfo(_options.KopiaExePath, _options.Layout, _options.HtmlDirectory, certificate, credentials, password, _options.Name)
+                    {
+                        StorageEnvironment = _options.StorageEnvironment,
+                    },
                     _options.Pin, _options.StartTimeout, _serverLogger, ct);
             }
             catch (KopiaServerStartException ex)

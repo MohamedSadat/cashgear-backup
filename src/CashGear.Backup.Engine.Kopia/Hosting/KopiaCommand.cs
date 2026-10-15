@@ -17,7 +17,7 @@ internal static partial class KopiaCommand
     private const int MaxErrorLines = 50;
 
     public static async Task<KopiaCommandResult> RunAsync(string exePath, KopiaPin pin, string workingDirectory, IReadOnlyList<string> arguments,
-        SecureSecret password, ILogger logger, CancellationToken ct)
+        SecureSecret password, IReadOnlyDictionary<string, SecureSecret> storageEnvironment, ILogger logger, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(exePath)
         {
@@ -35,13 +35,13 @@ internal static partial class KopiaCommand
             psi.ArgumentList.Add(argument);
         }
 
-        foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("KOPIA_", StringComparison.OrdinalIgnoreCase)).ToList())
-        {
-            psi.Environment.Remove(key);
-        }
-
+        KopiaServerProcess.RemoveInherited(psi.Environment);
         psi.Environment["KOPIA_CHECK_FOR_UPDATES"] = "false";
         psi.Environment["KOPIA_PASSWORD"] = password.Reveal();
+        foreach (var (key, value) in storageEnvironment)
+        {
+            psi.Environment[key] = value.Reveal();
+        }
 
         using var job = new JobObject();
         Process process;
@@ -55,6 +55,10 @@ internal static partial class KopiaCommand
         finally
         {
             psi.Environment.Remove("KOPIA_PASSWORD");
+            foreach (var key in storageEnvironment.Keys)
+            {
+                psi.Environment.Remove(key);
+            }
         }
 
         using (process)

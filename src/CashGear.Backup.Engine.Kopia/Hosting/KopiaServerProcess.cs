@@ -33,7 +33,11 @@ internal sealed record KopiaServerStartInfo(
     KopiaServerCertificate Certificate,
     KopiaServerCredentials Credentials,
     SecureSecret? RepositoryPassword,
-    string Name);
+    string Name)
+{
+    /// <summary>Storage credentials read from the environment (S3 keys).</summary>
+    public IReadOnlyDictionary<string, SecureSecret> StorageEnvironment { get; init; } = new Dictionary<string, SecureSecret>();
+}
 
 internal sealed class KopiaServerStartException(string message, int? exitCode, IReadOnlyList<string> outputTail)
     : Exception(message)
@@ -120,7 +124,7 @@ internal sealed partial class KopiaServerProcess : IAsyncDisposable
             psi.ArgumentList.Add(arg);
         }
 
-        ConfigureEnvironment(psi.Environment, info.Credentials, info.RepositoryPassword);
+        ConfigureEnvironment(psi.Environment, info.Credentials, info.RepositoryPassword, info.StorageEnvironment);
 
         var job = new JobObject();
         Process process;
@@ -140,6 +144,10 @@ internal sealed partial class KopiaServerProcess : IAsyncDisposable
         finally
         {
             psi.Environment.Remove("KOPIA_PASSWORD");
+            foreach (var key in info.StorageEnvironment.Keys)
+            {
+                psi.Environment.Remove(key);
+            }
         }
 
         try
@@ -169,15 +177,18 @@ internal sealed partial class KopiaServerProcess : IAsyncDisposable
     }
 
     /// <summary>
-    /// The child's environment: the inherited one minus every KOPIA_* variable (so nothing set on the machine
-    /// changes Kopia's behaviour), plus the server credentials and, once a config exists, the repository
-    /// password. Secrets never go on the command line.
+    /// The child's environment: the inherited one minus every KOPIA_* and AWS_* variable (so nothing set on the
+    /// machine changes Kopia's behaviour or lends it other credentials), plus the server credentials, once a config
+    /// exists the repository password, and the storage credentials of this repository. Secrets never go on the
+    /// command line.
     /// </summary>
-    public static void ConfigureEnvironment(IDictionary<string, string?> environment, KopiaServerCredentials credentials, SecureSecret? repositoryPassword)
+    public static void ConfigureEnvironment(IDictionary<string, string?> environment, KopiaServerCredentials credentials, SecureSecret? repositoryPassword,
+        IReadOnlyDictionary<string, SecureSecret>? storageEnvironment = null)
     {
-        foreach (var key in environment.Keys.Where(k => k.StartsWith("KOPIA_", StringComparison.OrdinalIgnoreCase)).ToList())
+        RemoveInherited(environment);
+        foreach (var (key, value) in storageEnvironment ?? new Dictionary<string, SecureSecret>())
         {
-            environment.Remove(key);
+            environment[key] = value.Reveal();
         }
 
         environment["KOPIA_SERVER_USERNAME"] = credentials.UiUser;
@@ -188,6 +199,15 @@ internal sealed partial class KopiaServerProcess : IAsyncDisposable
         if (repositoryPassword is not null)
         {
             environment["KOPIA_PASSWORD"] = repositoryPassword.Reveal();
+        }
+    }
+
+    /// <summary>Variables that would change Kopia's behaviour or its storage credentials.</summary>
+    public static void RemoveInherited(IDictionary<string, string?> environment)
+    {
+        foreach (var key in environment.Keys.Where(k => k.StartsWith("KOPIA_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("AWS_", StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            environment.Remove(key);
         }
     }
 

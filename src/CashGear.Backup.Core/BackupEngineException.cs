@@ -21,6 +21,12 @@ public enum BackupErrorKind
     /// <summary>The destination (disk, share, bucket) cannot be reached.</summary>
     DestinationUnreachable,
 
+    /// <summary>The destination refused the credentials (SFTP login, S3 keys, share account).</summary>
+    DestinationAccessDenied,
+
+    /// <summary>The server is not the one the user confirmed: its SFTP host key changed.</summary>
+    DestinationNotTrusted,
+
     /// <summary>The folder to back up does not exist or cannot be read.</summary>
     SourceUnavailable,
 

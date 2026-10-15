@@ -142,6 +142,35 @@ public class RequestShapeTests
     }
 
     [Fact]
+    public void Inherited_cloud_credentials_never_reach_kopia_only_the_repositorys_own()
+    {
+        var credentials = KopiaServerCredentials.Generate();
+        var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AWS_ACCESS_KEY_ID"] = "machine-wide-key",
+            ["AWS_SECRET_ACCESS_KEY"] = "machine-wide-secret",
+            ["aws_profile"] = "default",
+        };
+
+        KopiaServerProcess.ConfigureEnvironment(env, credentials, repositoryPassword: null);
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("AWS_", StringComparison.OrdinalIgnoreCase));
+
+        using var secret = new SecureSecret("repository-secret");
+        KopiaServerProcess.ConfigureEnvironment(env, credentials, repositoryPassword: null, new Dictionary<string, SecureSecret> { ["AWS_SECRET_ACCESS_KEY"] = secret });
+        Assert.Equal("repository-secret", env["AWS_SECRET_ACCESS_KEY"]);
+        Assert.False(env.ContainsKey("aws_profile"));
+    }
+
+    [Theory]
+    [InlineData("can't connect to storage: ssh: handshake failed: knownhosts: key mismatch", BackupErrorKind.DestinationNotTrusted)]
+    [InlineData("unable to open SFTP storage: ssh: unable to authenticate, attempted methods [none password]", BackupErrorKind.DestinationAccessDenied)]
+    [InlineData("error retrieving storage config from bucket \"b\": The request signature we calculated does not match the signature you provided.", BackupErrorKind.DestinationAccessDenied)]
+    [InlineData("error retrieving storage config from bucket \"b\": Access Denied.", BackupErrorKind.DestinationAccessDenied)]
+    [InlineData("unable to dial [nas:22]: connection refused", BackupErrorKind.DestinationUnreachable)]
+    public void Storage_errors_say_what_went_wrong(string message, BackupErrorKind expected) =>
+        Assert.Equal(expected, KopiaBackupEngine.StorageFailure(message));
+
+    [Fact]
     public void Secrets_never_appear_in_ToString()
     {
         var credentials = KopiaServerCredentials.Generate();

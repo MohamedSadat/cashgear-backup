@@ -44,6 +44,8 @@ Desktop.ini
 # Pinned Kopia binary: fetched by tools/kopia/fetch-kopia.ps1, never committed
 /tools/kopia/kopia.exe
 /tools/kopia/*.tmp
+# Test-only SFTP and S3 servers: fetched by tools/test-servers/fetch-test-servers.ps1, never committed
+/tools/test-servers/*/
 
 # Local run output (spike HTTP captures, logs)
 /artifacts/

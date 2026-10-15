@@ -58,7 +58,7 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
                     $"Repository {dest.RepositoryId} is already set up on this machine; connect to it instead.");
             }
 
-            var host = NewHost(dest.RepositoryId);
+            var host = NewHost(dest);
             try
             {
                 await host.StartAsync(null, ct);
@@ -103,7 +103,7 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
             }
 
             var layout = KopiaRepositoryLayout.For(_options.DataDirectory, dest.RepositoryId);
-            var host = NewHost(dest.RepositoryId);
+            var host = NewHost(dest);
             try
             {
                 if (File.Exists(layout.ConfigFile))
@@ -322,8 +322,9 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
     private static async Task<KopiaApiClient> ClientAsync(RepositorySession session, CancellationToken ct) =>
         (await session.Host.GetSessionAsync(ct)).Client;
 
-    private KopiaProcessHost NewHost(Guid repositoryId)
+    private KopiaProcessHost NewHost(DestinationSpec dest)
     {
+        var repositoryId = dest.RepositoryId;
         Directory.CreateDirectory(HtmlDirectory);
         var page = Path.Combine(HtmlDirectory, "index.html");
         if (!File.Exists(page))
@@ -342,6 +343,7 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
             HealthCheckInterval = _options.HealthCheckInterval,
             RestartBackoffInitial = _options.RestartBackoffInitial,
             RestartBackoffMax = _options.RestartBackoffMax,
+            StorageEnvironment = StorageEnvironmentFor(dest),
         }, _loggerFactory);
     }
 
@@ -374,9 +376,61 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
         return dest switch
         {
             FileSystemDestination fs => new StorageConnection("filesystem", new() { ["path"] = Path.GetFullPath(fs.Path) }),
+            SftpDestination sftp => new StorageConnection("sftp", SftpConfig(sftp)),
+            // Keys deliberately empty: Kopia would write them into repository.config in clear. It reads them from the
+            // server's environment instead (StorageEnvironmentFor).
+            S3Destination s3 => new StorageConnection("s3", new()
+            {
+                ["bucket"] = s3.Bucket,
+                ["prefix"] = s3.Prefix,
+                ["endpoint"] = s3.Endpoint,
+                ["region"] = s3.Region ?? "",
+                ["doNotUseTLS"] = !s3.UseTls,
+                ["accessKeyID"] = "",
+                ["secretAccessKey"] = "",
+                ["sessionToken"] = "",
+            }),
             _ => throw new BackupEngineException(BackupErrorKind.InvalidRequest, $"Destination type {dest.GetType().Name} is not supported yet."),
         };
     }
+
+    /// <summary>
+    /// SFTP settings as Kopia stores them. Kopia has no other way to take the login, so the password or key ends up
+    /// in repository.config inside the engine's data folder (SYSTEM and Administrators only).
+    /// </summary>
+    private static Dictionary<string, object> SftpConfig(SftpDestination sftp)
+    {
+        var config = new Dictionary<string, object>
+        {
+            ["host"] = sftp.Host,
+            ["port"] = sftp.Port,
+            ["username"] = sftp.Username,
+            ["path"] = sftp.Path,
+            ["knownHostsData"] = string.Join('\n', sftp.KnownHosts),
+            ["externalSSH"] = false,
+        };
+        if (sftp.Password is { } password)
+        {
+            config["password"] = password.Reveal();
+        }
+        else if (sftp.PrivateKey is { } key)
+        {
+            config["keyData"] = key.Reveal();
+        }
+
+        return config;
+    }
+
+    /// <summary>Copies of the storage credentials Kopia takes from its environment; the host owns them.</summary>
+    private static Dictionary<string, SecureSecret> StorageEnvironmentFor(DestinationSpec dest) => dest switch
+    {
+        S3Destination s3 => new()
+        {
+            ["AWS_ACCESS_KEY_ID"] = new SecureSecret(s3.AccessKeyId),
+            ["AWS_SECRET_ACCESS_KEY"] = s3.SecretAccessKey.Copy(),
+        },
+        _ => [],
+    };
 
     private static RepositoryInfo Info(RepositorySession session, RepoStatus status) => new()
     {
@@ -427,7 +481,8 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
             KopiaApiException.InvalidPassword => BackupErrorKind.InvalidPassword,
             KopiaApiException.NotInitialized => BackupErrorKind.RepositoryNotFound,
             KopiaApiException.AlreadyInitialized => BackupErrorKind.RepositoryAlreadyExists,
-            KopiaApiException.StorageConnection => BackupErrorKind.DestinationUnreachable,
+            KopiaApiException.StorageConnection => StorageFailure(api.Message),
+            _ when IsStorageMessage(api.Message) => StorageFailure(api.Message),
             _ => BackupErrorKind.EngineProtocolError,
         }, api.Message, api),
         HttpRequestException http => new BackupEngineException(BackupErrorKind.EngineUnavailable, $"The backup engine did not answer: {http.Message}", http),
@@ -435,6 +490,26 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
             new BackupEngineException(BackupErrorKind.EngineUnavailable, "The backup engine did not answer in time.", timeout),
         _ => ex,
     };
+
+    /// <summary>What a storage error means for the user: a changed SFTP host key, refused credentials, or no connection.</summary>
+    internal static BackupErrorKind StorageFailure(string message) =>
+        message.Contains("knownhosts", StringComparison.OrdinalIgnoreCase) || message.Contains("host key", StringComparison.OrdinalIgnoreCase)
+            ? BackupErrorKind.DestinationNotTrusted
+            : s_accessDenied.Any(m => message.Contains(m, StringComparison.OrdinalIgnoreCase))
+                ? BackupErrorKind.DestinationAccessDenied
+                : BackupErrorKind.DestinationUnreachable;
+
+    private static readonly string[] s_accessDenied =
+    [
+        "unable to authenticate", "permission denied",
+        // S3: error codes, and the services' own wording, which Kopia passes on instead of the code.
+        "Access Denied", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch",
+        "signature we calculated does not match", "Access Key Id you provided does not exist",
+    ];
+
+    private static bool IsStorageMessage(string message) =>
+        message.Contains("can't connect to storage", StringComparison.OrdinalIgnoreCase) || message.Contains("unable to open", StringComparison.OrdinalIgnoreCase)
+        && (message.Contains("SFTP", StringComparison.OrdinalIgnoreCase) || message.Contains("bucket", StringComparison.OrdinalIgnoreCase));
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
 

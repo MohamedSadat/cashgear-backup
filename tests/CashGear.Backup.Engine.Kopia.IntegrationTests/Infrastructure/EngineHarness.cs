@@ -33,17 +33,24 @@ internal sealed class EngineHarness : IAsyncDisposable
 
     public SecureSecret Password { get; }
     public Guid RepositoryId { get; } = Guid.NewGuid();
-    public FileSystemDestination Destination { get; }
+    /// <summary>A folder in the workspace unless a test passes its own (SFTP, S3).</summary>
+    public DestinationSpec Destination { get; private set; }
     public KopiaBackupEngine Engine { get; private set; } = null!;
 
     public static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public static async Task<EngineHarness> CreateAsync(string name, bool createRepository = true, Func<KopiaEngineOptions, KopiaEngineOptions>? configure = null)
+    public static async Task<EngineHarness> CreateAsync(string name, bool createRepository = true, Func<KopiaEngineOptions, KopiaEngineOptions>? configure = null,
+        Func<EngineHarness, Task<DestinationSpec>>? destination = null)
     {
         var harness = new EngineHarness(TestWorkspace.Create(name), new TestLog(), RandomNumberGenerator.GetString("abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_", 28));
         try
         {
             harness.Engine = harness.NewEngine(configure: configure);
+            if (destination is not null)
+            {
+                harness.Destination = await destination(harness);
+            }
+
             if (createRepository)
             {
                 await harness.Engine.CreateRepositoryAsync(harness.Destination, harness.Password, Ct);
