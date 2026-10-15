@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Throwaway Phase 0 code: lift what works into src/CashGear.Backup.Engine.Kopia, then delete spikes/. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="CashGear.RepoRoot" Value="$(CashGearRepoRoot)" />
+  </ItemGroup>
+</Project>
