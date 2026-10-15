@@ -1,14 +1,14 @@
 using System.Security.Cryptography;
 
-namespace KopiaSpike;
+namespace CashGear.Backup.Testing;
 
-public sealed record TreeEntry(string Path, bool IsDirectory, long Size, string? Sha256, DateTime LastWriteUtc, FileAttributes Attributes);
+internal sealed record TreeEntry(string Path, bool IsDirectory, long Size, string? Sha256, DateTime LastWriteUtc, FileAttributes Attributes);
 
 /// <summary>
 /// Snapshot of a directory tree for byte-compare: every file's SHA-256, plus the exact set of files
 /// and directories (empty ones included). Times and attributes are captured for reporting only.
 /// </summary>
-public sealed class TreeManifest
+internal sealed class TreeManifest
 {
     private TreeManifest(SortedDictionary<string, TreeEntry> entries) => Entries = entries;
 

@@ -1,7 +1,7 @@
-namespace KopiaSpike;
+namespace CashGear.Backup.Testing;
 
 /// <summary>Deterministic source tree covering the shapes a file backup must round-trip.</summary>
-public static class TreeFixture
+internal static class TreeFixture
 {
     private const int MiB = 1024 * 1024;
 

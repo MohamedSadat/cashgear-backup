@@ -5,6 +5,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CashGear.Backup.Testing;
 
 namespace KopiaSpike;
 

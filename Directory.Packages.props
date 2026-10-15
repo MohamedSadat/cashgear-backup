@@ -5,9 +5,11 @@
   <ItemGroup Label="Product">
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="bunit" Version="2.11.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
   </ItemGroup>
 </Project>

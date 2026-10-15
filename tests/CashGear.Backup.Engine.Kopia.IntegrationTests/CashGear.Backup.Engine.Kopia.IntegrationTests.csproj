@@ -8,6 +8,12 @@
   <ItemGroup>
     <Compile Include="..\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
     <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
+    <Compile Include="..\Shared\TreeFixture.cs" Link="Shared\TreeFixture.cs" />
+    <Compile Include="..\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
   </ItemGroup>
 
   <ItemGroup>
