@@ -28,8 +28,9 @@ installed exe already matches; `-Force` reinstalls.
    Kopia's signing key (fingerprint `7FB99DFD47809F0D5339D7D92273699AFD56A556`, needs `gpg`/`gpgv`
    from Git for Windows or Gpg4win), checks the zip against it, requires a valid Authenticode
    signature from `CN=Kopia LLC`, fetches `LICENSE` at the tag and rewrites the pin.
-3. Run `tools\notices\collect-kopia-go-modules.ps1`, then `tools\notices\update-notices.ps1`, and review the
-   licence changes (`NoticesTests` fails until both have run for the new pin).
+3. Run `tools\notices\collect-kopia-go-modules.ps1`, then `tools\notices\collect-kopia-webui-packages.ps1`, then
+   `tools\notices\update-notices.ps1`, and review the licence changes (`NoticesTests` fails until all three have
+   run for the new pin).
 4. Run the full test suite, including the spike/engine integration tests, against the new binary.
 5. Review the pin diff and commit it with the test results in the message.
 
@@ -41,4 +42,8 @@ installed exe already matches; `-Force` reinstalls.
 - `kopia.exe` statically links the Go standard library and many Go modules whose licences are not in the
   release zip. `tools\notices\collect-kopia-go-modules.ps1` reads them from the binary's build info and
   records their licence files under `tools\notices`; `THIRD-PARTY-NOTICES.txt` lists them (sections 3 and 5).
+- One of those modules, `github.com/kopia/htmluibuild`, is Kopia's compiled web UI (a Vite build of
+  https://github.com/kopia/htmlui with the licence comments stripped). CashGear never serves it, but it ships inside
+  `kopia.exe`. `tools\notices\collect-kopia-webui-packages.ps1` finds the npm packages compiled into it and records
+  their licence files; `THIRD-PARTY-NOTICES.txt` lists them (sections 6 and 7).
 - Don't use the Kopia name or logo as product branding.

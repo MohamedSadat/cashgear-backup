@@ -15,8 +15,8 @@ customer sees is .NET 10 C#.
   shares with their own account, SFTP and S3 destinations. Phase 4: Free/Pro editions with licence activation and a
   30-day offline grace (backups pause when lapsed, restores never), signed automatic updates, a support bundle,
   third-party notices and an About page, and the WiX 5.0.2 MSI (`installer/`). Before shipping: install-test the
-  MSI on clean machines, configure the licence server, update feed and signing certificate, and collect the Go
-  module notices (installer README). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
+  MSI on clean machines, and configure the licence server, update feed and signing certificate (installer
+  README). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
 
 ## Architecture
 
@@ -124,8 +124,9 @@ Tests that need Kopia find it via `CASHGEAR_KOPIA_EXE` or `tools/kopia/kopia.exe
 fetch command if it is missing or does not match the pin (a new git worktree needs the fetch too). The SFTP and S3
 tests do the same with the test servers in `tools/test-servers` (SFTPGo, versitygw; test-only, never shipped).
 `CashGear.Backup.Installer.Tests` reads the newest MSI in `artifacts\installer` (or `CASHGEAR_MSI`) and skips
-without one; `NoticesTests` fails when `THIRD-PARTY-NOTICES.txt` misses a shipped package or a Go module inside
-`kopia.exe`, or when `tools/notices/kopia-go-modules.json` was collected for another pin. The
+without one; `NoticesTests` fails when `THIRD-PARTY-NOTICES.txt` misses a shipped package, a Go module inside
+`kopia.exe` or an npm package in Kopia's web UI, or when `tools/notices/kopia-go-modules.json` was collected for
+another pin or `kopia-webui-packages.json` for another `htmluibuild` version. The
 engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KEEP_TEST_WORKSPACE=1` to keep
 `%TEMP%\cashgear-tests` and `%TEMP%\cashgear-agent-tests` (the agent's log is in `data\logs` there), and
 `CASHGEAR_TEST_LOG_DIR` for one engine log per engine test, passing tests included.
@@ -145,7 +146,7 @@ engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KE
 | `installer/` | WiX 5.0.2 MSI (`CashGear.Backup.Installer/`) and `build-installer.ps1`; its README lists what is open before shipping |
 | `tools/kopia/` | Kopia pin, fetch script, LICENSE (exe is gitignored) |
 | `tools/test-servers/` | Pins and fetch script for the SFTP and S3 servers the tests run (binaries gitignored) |
-| `tools/notices/` | Generates `THIRD-PARTY-NOTICES.txt` (repo root; shipped beside the app); `collect-kopia-go-modules.ps1` records the Go modules in `kopia.exe` and their licence files (rerun after a pin change) |
+| `tools/notices/` | Generates `THIRD-PARTY-NOTICES.txt` (repo root; shipped beside the app); `collect-kopia-go-modules.ps1` records the Go modules in `kopia.exe` and their licence files, `collect-kopia-webui-packages.ps1` the npm packages in Kopia's web UI inside it (rerun both after a pin change) |
 | `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest) |
 | `tests/CashGear.Backup.Client.Tests` | `AgentClient`, the pipe-server check and the elevated-helper relay against the agent hosted in-process (links `AgentHarness`) |
 | `tests/CashGear.Backup.UI.Components.Tests` | bUnit tests of the pages and components against a fake `IAgentClient`, plus the view models |
