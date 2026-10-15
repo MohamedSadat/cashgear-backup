@@ -1,9 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- EF Core + SQLite state.db: jobs, runs, settings, licence (Phase 1). -->
+  <!-- EF Core + SQLite state.db: destinations, jobs, run history, settings. Migrations live in Migrations/
+       (dotnet tool restore, then: dotnet ef migrations add <Name> -p src\CashGear.Backup.Data). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\CashGear.Backup.Core\CashGear.Backup.Core.csproj" />
