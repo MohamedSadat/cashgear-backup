@@ -1,8 +1,10 @@
 # Regenerates THIRD-PARTY-NOTICES.txt (repo root) from what the agent and the desktop app ship: the pinned
 # kopia.exe, the Go modules inside it (tools\notices\kopia-go-modules.json and kopia-go-licenses, written by
-# collect-kopia-go-modules.ps1) and every NuGet package with runtime files. Run after a restore or build, whenever a
-# package or the kopia pin changes (for a new pin, run collect-kopia-go-modules.ps1 first); NoticesTests fails until
-# the file is current. Reads only local files.
+# collect-kopia-go-modules.ps1), the npm packages in Kopia's web UI inside it (kopia-webui-packages.json and
+# kopia-webui-licenses, written by collect-kopia-webui-packages.ps1) and every NuGet package with runtime files. Run
+# after a restore or build, whenever a package or the kopia pin changes (for a new pin, run
+# collect-kopia-go-modules.ps1 and then collect-kopia-webui-packages.ps1 first); NoticesTests fails until the file is
+# current. Reads only local files.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\notices\update-notices.ps1
 
@@ -86,6 +88,30 @@ foreach ($entry in $goEntries) {
         $goTexts[$text].Add("$($entry.Label): $($file.path)")
     }
 }
+
+# The npm packages compiled into Kopia's web UI (github.com/kopia/htmluibuild, one of the Go modules above).
+$webData = Get-Content (Join-Path $PSScriptRoot 'kopia-webui-packages.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$htmlUiBuild = @($goData.modules | Where-Object { $_.path -eq $webData.htmluibuild.path })
+if ($htmlUiBuild.Count -ne 1 -or $htmlUiBuild[0].version -ne $webData.htmluibuild.version -or $htmlUiBuild[0].sum -ne $webData.htmluibuild.sum) {
+    throw "kopia-webui-packages.json describes $($webData.htmluibuild.path) $($webData.htmluibuild.version), kopia-go-modules.json does not: run tools\notices\collect-kopia-webui-packages.ps1 first."
+}
+$webTexts = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal)
+foreach ($package in $webData.packages) {
+    $label = "$($package.name) $($package.version)"
+    $sources = @(foreach ($file in $package.files) {
+        if (-not $file.PSObject.Properties['standardApache']) { [pscustomobject]@{ Path = "$($package.name)@$($package.version)\$($file.path)"; Label = "${label}: $($file.path)" } }
+    })
+    if ($package.PSObject.Properties['spdx']) {
+        $sources += @(foreach ($id in $package.spdx) { [pscustomobject]@{ Path = "spdx\$id.txt"; Label = "${label}: $id (text from the SPDX licence list $($webData.spdxLicenseListVersion))" } })
+    }
+    foreach ($source in $sources) {
+        $path = Join-Path $PSScriptRoot ("kopia-webui-licenses\$($source.Path)" -replace '/', '\')
+        $lines = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8).Replace("`r`n", "`n").Split("`n") | ForEach-Object { $_.TrimEnd() }
+        $text = ($lines -join "`n").Trim("`n")
+        if (-not $webTexts.Contains($text)) { $webTexts.Add($text, (New-Object System.Collections.Generic.List[string])) }
+        $webTexts[$text].Add($source.Label)
+    }
+}
 $mit = @'
 MIT License
 
@@ -140,7 +166,7 @@ $out = New-Object System.Text.StringBuilder
 [void]$out.AppendLine('  Copyright: The Kopia Authors')
 [void]$out.AppendLine('  Source: https://github.com/kopia/kopia')
 [void]$out.AppendLine('  kopia.exe also contains the Go standard library and Go modules under their own licences, listed in')
-[void]$out.AppendLine('  section 3.')
+[void]$out.AppendLine("  section 3, and Kopia's web UI with the npm packages compiled into it, listed in section 6.")
 [void]$out.AppendLine()
 [void]$out.AppendLine('2. .NET runtime and packages')
 [void]$out.AppendLine('----------------------------')
@@ -172,6 +198,7 @@ foreach ($entry in $goEntries) {
     [void]$out.AppendLine("  Copyright: $($copyright[0])")
     foreach ($line in ($copyright | Select-Object -Skip 1)) { [void]$out.AppendLine("             $line") }
     [void]$out.AppendLine("  Source: $($entry.Source)")
+    if ($entry.Folder -eq $webData.htmluibuild.path) { [void]$out.AppendLine("  Contains Kopia's web UI; the npm packages compiled into it are listed in section 6.") }
     [void]$out.AppendLine()
 }
 [void]$out.AppendLine('4. Licence texts')
@@ -205,7 +232,38 @@ foreach ($text in $goTexts.Keys) {
     [void]$out.AppendLine()
     [void]$out.AppendLine($text)
 }
+[void]$out.AppendLine()
+[void]$out.AppendLine("6. npm packages in Kopia's web UI")
+[void]$out.AppendLine('---------------------------------')
+[void]$out.AppendLine()
+[void]$out.AppendLine("kopia.exe also contains Kopia's web UI ($($webData.htmluibuild.path) in section 3), a Vite build of")
+[void]$out.AppendLine("$($webData.htmlui.repository) at commit $($webData.htmlui.commit). CashGear Backup does not")
+[void]$out.AppendLine("serve it, but it ships inside kopia.exe. The build compiles in the $(@($webData.packages).Count) npm packages below and drops their")
+[void]$out.AppendLine('licence comments, so their licence and NOTICE files are reproduced in section 7, except files that hold the')
+[void]$out.AppendLine('Apache-2.0 text of section 4.')
+[void]$out.AppendLine()
+foreach ($package in $webData.packages) {
+    $copyright = @($package.copyright)
+    if ($copyright.Count -eq 0) { $copyright = @("(none in the package's licence files)") }
+    [void]$out.AppendLine("$($package.name) $($package.version)")
+    [void]$out.AppendLine("  Licence: $($package.license)")
+    [void]$out.AppendLine("  Copyright: $($copyright[0])")
+    foreach ($line in ($copyright | Select-Object -Skip 1)) { [void]$out.AppendLine("             $line") }
+    [void]$out.AppendLine("  Source: https://www.npmjs.com/package/$($package.name)/v/$($package.version)")
+    if ($package.PSObject.Properties['note']) { [void]$out.AppendLine("  Note: $($package.note)") }
+    [void]$out.AppendLine()
+}
+[void]$out.AppendLine("7. Web UI package licence and notice files")
+[void]$out.AppendLine('------------------------------------------')
+foreach ($text in $webTexts.Keys) {
+    [void]$out.AppendLine()
+    [void]$out.AppendLine('----')
+    [void]$out.AppendLine()
+    foreach ($label in $webTexts[$text]) { [void]$out.AppendLine($label) }
+    [void]$out.AppendLine()
+    [void]$out.AppendLine($text)
+}
 
 $target = Join-Path $root 'THIRD-PARTY-NOTICES.txt'
 [System.IO.File]::WriteAllText($target, $out.ToString().Replace("`r`n", "`n").Replace("`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "Wrote $target ($($rows.Count) packages, $(@($goData.modules).Count) Go modules)."
+Write-Host "Wrote $target ($($rows.Count) packages, $(@($goData.modules).Count) Go modules, $(@($webData.packages).Count) web UI packages)."
