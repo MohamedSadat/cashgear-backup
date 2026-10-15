@@ -1,8 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Agent tests: state.db, DPAPI, schedules, and the whole agent hosted in-process on a private pipe,
+       driven through the gRPC client against the pinned kopia.exe. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
+    <Compile Include="..\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
+    <Compile Include="..\Shared\TreeFixture.cs" Link="Shared\TreeFixture.cs" />
+    <Compile Include="..\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CashGear.Backup.Agent\CashGear.Backup.Agent.csproj" />
