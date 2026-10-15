@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="KopiaSpike.Tests/KopiaSpike.Tests.csproj" />
+  <Project Path="KopiaSpike/KopiaSpike.csproj" />
+</Solution>
