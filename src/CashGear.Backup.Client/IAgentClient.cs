@@ -46,6 +46,24 @@ public interface IAgentClient
 
     Task<IReadOnlyList<SnapshotEntry>> BrowseSnapshotAsync(string jobId, string snapshotId, string path, CancellationToken ct);
 
-    /// <summary>Manage. Restores into a new or empty folder; never overwrites.</summary>
+    /// <summary>Name search in a snapshot; the last response has <see cref="SearchSnapshotResponse.Done"/> set.</summary>
+    IAsyncEnumerable<SearchSnapshotResponse> SearchSnapshotAsync(string jobId, string snapshotId, string query, int maxResults, CancellationToken ct);
+
+    /// <summary>Manage. Restores into a new or empty folder, or back into the job's folder keeping both versions; never overwrites.</summary>
     Task<Run> StartRestoreAsync(StartRestoreRequest request, CancellationToken ct);
+
+    /// <summary>Checks the job's backups now; a run of kind Verify.</summary>
+    Task<Run> VerifyJobNowAsync(string jobId, CancellationToken ct);
+
+    /// <summary>Most serious first.</summary>
+    Task<IReadOnlyList<Alert>> ListAlertsAsync(CancellationToken ct);
+
+    /// <summary>The email password is never returned.</summary>
+    Task<Settings> GetSettingsAsync(CancellationToken ct);
+
+    /// <summary>Manage. Carries the email password when one is typed.</summary>
+    Task<Settings> UpdateSettingsAsync(Settings settings, CancellationToken ct);
+
+    /// <summary>Manage. An empty password uses the saved one.</summary>
+    Task SendTestEmailAsync(EmailSettings email, CancellationToken ct);
 }

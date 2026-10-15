@@ -11,6 +11,8 @@ public static class ManageCalls
     public const string UpdateJob = nameof(UpdateJob);
     public const string DeleteJob = nameof(DeleteJob);
     public const string StartRestore = nameof(StartRestore);
+    public const string UpdateSettings = nameof(UpdateSettings);
+    public const string SendTestEmail = nameof(SendTestEmail);
 }
 
 /// <summary>Makes Manage calls on a connection that may make them: the elevated helper's.</summary>

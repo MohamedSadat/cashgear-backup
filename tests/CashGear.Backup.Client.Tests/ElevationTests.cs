@@ -47,6 +47,16 @@ public class ElevationTests
         using var client = For(agent);
         Assert.Equal(job.Id, Assert.Single(await client.ListJobsAsync(Ct)).Id);
 
+        // Settings (with the email password) go the same way; the password does not come back.
+        var settings = await client.GetSettingsAsync(Ct);
+        settings.AlertAfterDays = 5;
+        settings.Email = new EmailSettings { SmtpHost = "mail.example.test", Security = SmtpSecurity.Starttls, Username = "backup", Password = "mail-Secret-1" };
+        var saved = await session.InvokeAsync(ManageCalls.UpdateSettings, new UpdateSettingsRequest { Settings = settings }, Settings.Parser, Ct);
+        Assert.Equal(5, saved.AlertAfterDays);
+        Assert.True(saved.Email.PasswordSaved);
+        Assert.Equal("", saved.Email.Password);
+        Assert.Equal(1, launcher.Launches);
+
         // Closing the session ends the helper.
         await session.DisposeAsync();
         Assert.Equal(ElevatedHelper.ExitOk, await launcher.Helper!.WaitAsync(TimeSpan.FromSeconds(30), Ct));

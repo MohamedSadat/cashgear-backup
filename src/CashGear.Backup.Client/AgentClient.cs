@@ -127,6 +127,52 @@ public sealed class AgentClient : IAgentClient, IDisposable
     public Task<Run> StartRestoreAsync(StartRestoreRequest request, CancellationToken ct) =>
         ManageAsync(ManageCalls.StartRestore, request, Run.Parser, o => _agent.StartRestoreAsync(request, o), ct);
 
+    public async IAsyncEnumerable<SearchSnapshotResponse> SearchSnapshotAsync(string jobId, string snapshotId, string query, int maxResults,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        using var call = _agent.SearchSnapshot(new SearchSnapshotRequest { JobId = jobId, SnapshotId = snapshotId, Query = query, MaxResults = maxResults }, cancellationToken: ct);
+        while (true)
+        {
+            bool more;
+            try
+            {
+                more = await call.ResponseStream.MoveNext(ct);
+            }
+            catch (RpcException ex)
+            {
+                throw Translate(ex, ct);
+            }
+
+            if (!more)
+            {
+                yield break;
+            }
+
+            yield return call.ResponseStream.Current;
+        }
+    }
+
+    public Task<Run> VerifyJobNowAsync(string jobId, CancellationToken ct) =>
+        CallAsync(o => _agent.VerifyJobNowAsync(new VerifyJobNowRequest { JobId = jobId }, o), ct);
+
+    public async Task<IReadOnlyList<Alert>> ListAlertsAsync(CancellationToken ct) =>
+        (await CallAsync(o => _agent.ListAlertsAsync(new ListAlertsRequest(), o), ct)).Alerts;
+
+    public Task<Settings> GetSettingsAsync(CancellationToken ct) =>
+        CallAsync(o => _agent.GetSettingsAsync(new GetSettingsRequest(), o), ct);
+
+    public Task<Settings> UpdateSettingsAsync(Settings settings, CancellationToken ct)
+    {
+        var request = new UpdateSettingsRequest { Settings = settings };
+        return ManageAsync(ManageCalls.UpdateSettings, request, Settings.Parser, o => _agent.UpdateSettingsAsync(request, o), ct);
+    }
+
+    public Task SendTestEmailAsync(EmailSettings email, CancellationToken ct)
+    {
+        var request = new SendTestEmailRequest { Email = email };
+        return ManageAsync(ManageCalls.SendTestEmail, request, SendTestEmailResponse.Parser, o => _agent.SendTestEmailAsync(request, o), ct);
+    }
+
     public void Dispose() => _channel.Dispose();
 
     private async Task<T> ManageAsync<T>(string method, IMessage request, MessageParser<T> parser, Func<CallOptions, AsyncUnaryCall<T>> direct, CancellationToken ct)

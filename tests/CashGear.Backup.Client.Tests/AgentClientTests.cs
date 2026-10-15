@@ -55,6 +55,18 @@ public class AgentClientTests
         Assert.Equal(RunState.Succeeded, restored.State);
         Assert.Equal("alpha", await File.ReadAllTextAsync(Path.Combine(target, "a.txt"), Ct));
 
+        var found = new List<SnapshotEntry>();
+        await foreach (var response in client.SearchSnapshotAsync(job.Id, snapshot.Id, "B.TX", 0, Ct))
+        {
+            found.AddRange(response.Matches);
+        }
+
+        Assert.Equal("docs/b.txt", Assert.Single(found).Path);
+        var check = await client.VerifyJobNowAsync(job.Id, Ct);
+        Assert.Equal(RunKind.Verify, check.Kind);
+        Assert.Equal(RunState.Succeeded, (await ToListAsync(client.WatchRunAsync(check.Id, Ct)))[^1].Finished.State);
+        Assert.Empty(await client.ListAlertsAsync(Ct));
+
         // Restores never overwrite: the same target again is refused, with a kind the UI can act on.
         var again = await Assert.ThrowsAsync<AgentCallException>(() =>
             client.StartRestoreAsync(new StartRestoreRequest { JobId = job.Id, SnapshotId = snapshot.Id, TargetFolder = target }, Ct));

@@ -106,6 +106,8 @@ public static class ElevatedHelper
                 ManageCalls.UpdateJob => await agent.UpdateJobAsync(UpdateJobRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 ManageCalls.DeleteJob => await agent.DeleteJobAsync(DeleteJobRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 ManageCalls.StartRestore => await agent.StartRestoreAsync(StartRestoreRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
+                ManageCalls.UpdateSettings => await agent.UpdateSettingsAsync(UpdateSettingsRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
+                ManageCalls.SendTestEmail => await agent.SendTestEmailAsync(SendTestEmailRequest.Parser.ParseFrom(call.Request), cancellationToken: ct),
                 _ => throw new AgentCallException(StatusCode.Unimplemented, AgentErrorKinds.InvalidArgument, "The administrator helper only makes setup and restore calls."),
             };
             return new ElevatedReply { Response = response.ToByteString() };

@@ -43,6 +43,25 @@ internal sealed class FakeAgentClient : IAgentClient
     public List<(string Id, JobSpec Spec)> UpdatedJobs { get; } = [];
     public List<StartRestoreRequest> Restores { get; } = [];
 
+    /// <summary>Search results by (snapshot id, query).</summary>
+    public Dictionary<(string SnapshotId, string Query), List<SnapshotEntry>> SearchResults { get; } = [];
+
+    public List<Alert> Alerts { get; } = [];
+
+    public Settings Settings { get; set; } = new()
+    {
+        AlertAfterDays = 3, VerifyEveryDays = 7, VerifySamplePercent = 5, Email = new EmailSettings { Security = SmtpSecurity.Starttls },
+    };
+
+    public List<Settings> SavedSettings { get; } = [];
+    public List<EmailSettings> TestEmails { get; } = [];
+
+    public Func<string, Run> OnVerifyJobNow { get; set; } = jobId => new Run
+    {
+        Id = "verify-new", JobId = jobId, Kind = RunKind.Verify, State = RunState.Running, Trigger = RunTrigger.Manual,
+        StartedAt = Timestamp.FromDateTimeOffset(Sample.Now),
+    };
+
     public Func<string, Run> OnRunJobNow { get; set; } = jobId => new Run
     {
         Id = "run-new", JobId = jobId, Kind = RunKind.Backup, State = RunState.Running, Trigger = RunTrigger.Manual,
@@ -142,6 +161,37 @@ internal sealed class FakeAgentClient : IAgentClient
     {
         Restores.Add(request.Clone());
         return OnStartRestore(request);
+    });
+
+    public async IAsyncEnumerable<SearchSnapshotResponse> SearchSnapshotAsync(string jobId, string snapshotId, string query, int maxResults,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var matches = await Respond($"SearchSnapshot:{snapshotId}/{query}", () => SearchResults.GetValueOrDefault((snapshotId, query), []));
+        yield return new SearchSnapshotResponse { Matches = { matches }, FoldersSearched = 3 };
+        yield return new SearchSnapshotResponse { Done = true, FoldersSearched = 3 };
+    }
+
+    public Task<Run> VerifyJobNowAsync(string jobId, CancellationToken ct) => Respond($"VerifyJobNow:{jobId}", () => OnVerifyJobNow(jobId));
+
+    public Task<IReadOnlyList<Alert>> ListAlertsAsync(CancellationToken ct) => Respond<IReadOnlyList<Alert>>("ListAlerts", () => [.. Alerts.Select(a => a.Clone())]);
+
+    public Task<Settings> GetSettingsAsync(CancellationToken ct) => Respond("GetSettings", () => Settings.Clone());
+
+    public Task<Settings> UpdateSettingsAsync(Settings settings, CancellationToken ct) => Respond("UpdateSettings", () =>
+    {
+        SavedSettings.Add(settings.Clone());
+        var stored = settings.Clone();
+        stored.Email.PasswordSaved = settings.Email.ClearPassword ? false : settings.Email.Password.Length > 0 || Settings.Email.PasswordSaved;
+        stored.Email.Password = "";
+        stored.Email.ClearPassword = false;
+        Settings = stored;
+        return stored.Clone();
+    });
+
+    public Task SendTestEmailAsync(EmailSettings email, CancellationToken ct) => Respond("SendTestEmail", () =>
+    {
+        TestEmails.Add(email.Clone());
+        return 0;
     });
 
     private Channel<RunProgress> Watch(string runId) => _watches.GetOrAdd(runId, _ => Channel.CreateUnbounded<RunProgress>());
