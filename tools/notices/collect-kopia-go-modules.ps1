@@ -80,7 +80,8 @@ function Read-GoBuildInfo([byte[]]$Bytes, [string]$Text) {
         $f = $line.Split("`t")
         switch ($f[0]) {
             'mod' { $main = [pscustomobject]@{ Path = $f[1]; Version = $f[2] } }
-            'dep' { $deps.Add([pscustomobject]@{ Path = $f[1]; Version = $f[2]; Sum = $f[3]; Replace = $null }) }
+            # A replaced module's dep line has no sum; its "=>" line does.
+            'dep' { $deps.Add([pscustomobject]@{ Path = $f[1]; Version = $f[2]; Sum = $(if ($f.Count -gt 3) { $f[3] } else { '' }); Replace = $null }) }
             '=>' { $deps[$deps.Count - 1].Replace = [pscustomobject]@{ Path = $f[1]; Version = $f[2]; Sum = $f[3] } }
         }
     }
