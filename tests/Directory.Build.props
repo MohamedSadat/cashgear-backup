@@ -1,0 +1,20 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- xUnit v3 on Microsoft.Testing.Platform: test projects are executables. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Lets tests find repo files (tools/kopia, src/) without walking up from bin/. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="CashGear.RepoRoot" Value="$(CashGearRepoRoot)" />
+  </ItemGroup>
+</Project>
