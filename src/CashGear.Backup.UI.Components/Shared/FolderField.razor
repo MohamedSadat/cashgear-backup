@@ -1,0 +1,17 @@
+<input />
+@code {
+    [Parameter, EditorRequired]
+    public string Id { get; set; } = "";
+
+    [Parameter]
+    public string Title { get; set; } = "";
+
+    [Parameter]
+    public string Value { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+}
