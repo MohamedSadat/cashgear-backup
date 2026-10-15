@@ -209,14 +209,6 @@ public sealed partial class KopiaBackupEngine : IBackupEngine
         }
     }
 
-    /// <summary>Not available yet: Kopia has no REST endpoint for verification (Phase 3 runs the CLI against the same config).</summary>
-    public Task<VerifyResult> VerifyAsync(BackupJob job, double sampleFraction, CancellationToken ct) =>
-        throw new NotSupportedException("Verification is not implemented yet: Kopia's server has no REST endpoint for it (Phase 3: `kopia snapshot verify` against the repository config).");
-
-    /// <summary>Not available yet: Kopia has no REST endpoint for maintenance (Phase 3 runs the CLI against the same config).</summary>
-    public Task RunMaintenanceAsync(RepositoryInfo repo, bool full, CancellationToken ct) =>
-        throw new NotSupportedException("Maintenance is not implemented yet: Kopia's server has no REST endpoint for it (Phase 3: `kopia maintenance run` against the repository config).");
-
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)

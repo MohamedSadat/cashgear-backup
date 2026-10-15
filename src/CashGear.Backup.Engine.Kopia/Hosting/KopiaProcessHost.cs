@@ -156,6 +156,26 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
         }
     }
 
+    /// <summary>Runs a kopia CLI command beside the server, with the repository password the server uses.</summary>
+    public async Task<KopiaCommandResult> RunCommandAsync(IReadOnlyList<string> arguments, CancellationToken ct)
+    {
+        SecureSecret? password;
+        lock (_lock)
+        {
+            password = ConfigExists ? _password?.Copy() : null;
+        }
+
+        using (password)
+        {
+            if (password is null)
+            {
+                throw new BackupEngineException(BackupErrorKind.RepositoryNotConnected, $"Repository {_options.Name} is not connected.");
+            }
+
+            return await KopiaCommand.RunAsync(_options.KopiaExePath, _options.Pin, _options.Layout.Root, arguments, password, _logger, ct);
+        }
+    }
+
     /// <summary>The current server, waiting for a restart in progress.</summary>
     public async Task<KopiaServerSession> GetSessionAsync(CancellationToken ct)
     {
