@@ -90,6 +90,19 @@ DevTools protocol on `http://127.0.0.1:9333/json` (Debug builds also open DevToo
 - **Tray:** colour and tooltip follow the most serious alert; a Windows notification for alerts not shown since
   the app started.
 
+## Remote destinations and Phase 4 in the app
+
+- **Wizard "where":** a folder, a network share with its own account (username and password), an SFTP server
+  (password or private key; "Check the server" reads every host key as the user with SSH.NET and the user must
+  confirm the fingerprints before going on) or S3-compatible storage (endpoint, region, bucket, prefix defaulting to
+  the PC name, keys, HTTPS on by default). Every secret is dropped from the draft once the agent has it.
+- **Licence** (Settings): edition and state, key entry (cleared from the page whether or not it was accepted),
+  removal behind a confirmation. The dashboard shows a banner in the offline grace period (warning) and when lapsed
+  (error). In the Free edition the wizard offers no second job and disables SFTP/S3; email alerts are disabled.
+- **Updates** (Settings): status and "Check for updates"; hidden when no update source is configured.
+- **Support file** (Settings): saved where the user chooses; Manage-level, so it may ask for administrator approval.
+- **About**: app and service versions and `THIRD-PARTY-NOTICES.txt`, installed beside the app.
+
 ## Findings while building it
 
 | # | Observed | Consequence |
@@ -133,6 +146,7 @@ DevTools protocol on `http://127.0.0.1:9333/json` (Debug builds also open DevToo
 
 - The real UAC prompt is not exercised by automated tests (the helper runs in-process there); try it by running the
   agent without `AllowNonElevatedManage` and creating a job.
-- Start at sign-in (`--tray`), the WebView2 runtime check and the Start menu shortcut come with the installer (Phase 4).
+- ~~Start at sign-in and the Start menu shortcut~~ done by the MSI. The MSI does not check for or install the
+  WebView2 Runtime.
 - No app log file yet; unexpected errors show in the page.
-- SMB with credentials, SFTP and S3 destinations (the agent supports folders only), notifications (Phase 3).
+- ~~SMB with credentials, SFTP and S3 destinations, notifications~~ done.

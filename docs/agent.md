@@ -71,6 +71,23 @@ over a local named pipe.
 Access levels: `SearchSnapshot`, `ListAlerts` and `GetSettings` are Read; `VerifyJobNow` is Operate; `UpdateSettings`
 and `SendTestEmail` are Manage (`SendTestEmail` makes the LocalSystem agent connect to a server the caller names).
 
+## Phase 4: remote destinations, licences, updates, support
+
+| Piece | Where | What it does |
+|---|---|---|
+| Destinations | `Destinations/DestinationSettings.cs`, `ShareConnection.cs`, `Engine/EngineHost.cs` | Folder, network share with its own account, SFTP (password or private key, trusted host keys) and S3-compatible storage. Non-secret settings are JSON in state.db; the share/SFTP/S3 secret is a DPAPI blob beside the repository password. A share is opened with `WNetAddConnection2` (temporary) for the agent's session before each use; reachability is a folder check, a share connect, or a TCP probe |
+| Licences | `Licensing/` | Free edition without a licence: one job, folder and share destinations, no email alerts. A key is activated with the licence server, which returns an ECDSA-signed token bound to this PC's machine identity; refreshed daily; valid for 30 days without the server (a warning after 7). Lapsed, expired or revoked: new backups pause, restores and checks never do. `licence.ini` from a silent install is activated at start and deleted |
+| Updates | `Updates/` | Daily (and on demand): a signed manifest, the MSI downloaded into `data\updates`, checked against the manifest's size and SHA-256 and an Authenticode signature by a pinned publisher thumbprint (WinVerifyTrust, revocation checked). Installed with `msiexec /qn` only while nothing runs; new runs are refused meanwhile ("installing an update"); if the service has not been restarted 30 minutes later, runs resume and the update counts as failed |
+| Support bundle | `Support/SupportBundle.cs` | A zip: `summary.json` (versions, licence and update state, destinations, jobs, the last 100 runs, settings without addresses or secrets), the agent's logs of the last 7 days and the installer's logs; lines that look like they carry a secret are cut |
+
+Access levels: `GetLicence` and `GetUpdateStatus` are Read; `CheckForUpdates` is Operate; `ActivateLicence`,
+`RemoveLicence` and `CreateSupportBundle` are Manage (the bundle names every backed-up folder).
+
+Configuration (`Agent` section of `appsettings.json`), all empty in the repository: `LicenceServerUrl` and
+`LicencePublicKeys` (SubjectPublicKeyInfo, base64), `UpdateManifestUrl`, `UpdatePublicKeys` and
+`UpdatePublisherThumbprints` (SHA-256 of the code-signing certificate). Without them no key can be activated and no
+update is checked. `LicenceEnforcement` (default on) is turned off by the tests and for development only.
+
 ## Findings while building it
 
 | # | Observed (.NET 10) | Consequence |
@@ -106,11 +123,27 @@ and `SendTestEmail` are Manage (`SendTestEmail` makes the LocalSystem agent conn
 8. **Email password** (Phase 3): DPAPI machine scope like repository passwords, write-only over the API, kept
    out of logs; MailKit's protocol log is never enabled. Unencrypted SMTP is allowed only without a login.
 9. **Alerts by email** go to whatever addresses an administrator enters; their text names jobs and folder paths.
+10. **SFTP password in clear** in the repository's `repository.config` (FINDINGS, remote destinations #3), inside the
+    data folder that only SYSTEM and Administrators can read. S3 keys are kept out of it (environment only).
+11. **Share credentials under LocalSystem:** `WNetAddConnection2` connects the agent's (SYSTEM) logon session to
+    the share with the saved account; other LocalSystem processes on the PC can use that connection while it lasts.
+12. **Licence enforcement never touches existing backups or restores:** the Free limits refuse a second job and
+    SFTP/S3 destinations; after a downgrade only the oldest job keeps backing up; a lapsed licence pauses backups
+    (each scheduled run is recorded as failed with the reason). The token, not the key, is stored; the UI sees the
+    last four characters only.
+13. **Automatic updates** replace the product's own files as LocalSystem. They need three things to agree: the
+    manifest's ECDSA signature (pinned keys), the MSI's SHA-256 from that manifest, and an Authenticode signature
+    by a pinned certificate. A scheduled backup that fires while the installer runs is refused, not queued.
+14. **Support bundle contents:** folder paths, destination locations (SFTP user and host, S3 bucket and endpoint),
+    job and run history, and log lines. No passwords, keys, tokens or email addresses.
 
 ## Not done yet
 
-- Installer work (Phase 4): data folder ACL, Event Log source, service registration.
+- ~~Installer work~~ Done in Phase 4 (`installer/`); not yet installed on a clean machine.
 - ~~The client side of pipe-squatting protection~~ Done in Phase 2: `AgentServerVerifier` checks every connection
   (docs/desktop.md).
 - Paging for very large folders in `BrowseSnapshot` (the client's default 4 MB message limit).
-- Notifications and "no backup in N days" alerts (Phase 3); licence checks before runs (Phase 4).
+- ~~Notifications, alerts, licence checks~~ Done (Phases 3 and 4).
+- The licence server and the update feed themselves (only their contracts and test fakes exist): `POST activate`
+  and `POST refresh` answering `{"token"}` or `{"error","revoked"}`; the feed is a signed manifest
+  (`Updates/UpdateManifest.cs`).

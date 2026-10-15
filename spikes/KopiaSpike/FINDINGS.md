@@ -129,13 +129,29 @@ Observed against the same pinned binary (2026-10-15); covered by `Engine/VerifyT
 | 4 | The CLI verify runs fine beside the server on the same repository | No need to stop the server |
 | 5 | A directory object for an **empty folder** has `"entries": null`, which replaced the DTO's empty list; `BrowseAsync` then threw (Phase 1a bug, found by the agent's snapshot search walking every folder) | Fixed in `DirectoryManifest`; `BrowseTests` covers it |
 
+## Remote destinations: SFTP and S3
+
+Observed against the same pinned binary (2026-10-16) with pinned local test servers (SFTPGo 2.7.6 and versitygw
+1.8.0, `tools/test-servers`; MinIO's community binaries now answer 410 Gone); covered by `Engine/RemoteDestinationTests.cs`
+and the agent's `RemoteDestinationTests.cs`.
+
+| # | Observed | Consequence |
+|---|---|---|
+| 1 | SFTP with `knownHostsData` holding one of the server's host keys fails with `knownhosts: key mismatch` when the server offers another key type first | The desktop app reads every host key the server offers (one SSH handshake per algorithm), the user confirms the fingerprints, and all of them are stored and passed |
+| 2 | A changed host key fails the connection (`knownhosts: key mismatch` / `key is unknown`) | Mapped to `BackupErrorKind.DestinationNotTrusted`; the destination must be set up again to trust a new key |
+| 3 | **The SFTP password (or private key) is stored in clear in the repository's `repository.config`**; Kopia has no environment variable or other channel for it | Accepted for now: the config lives in the data folder (SYSTEM and Administrators only). Review item in docs/agent.md |
+| 4 | S3 accepts empty `accessKeyID`/`secretAccessKey` in the storage config and then reads `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from the server's environment (the CLI copies those variables into its flags, which made a first spike look as if the config held them) | Keys go only into the kopia server's and the verify command's environment; `repository.config` holds none (tested by searching the data folder). Inherited `AWS_*` variables are removed like `KOPIA_*` |
+| 5 | Wrong S3 keys come back as prose (`The request signature we calculated does not match...`, `The AWS Access Key Id you provided does not exist...`), not as a status code | `KopiaBackupEngine.StorageFailure` maps those phrases to `DestinationAccessDenied`; anything else is `DestinationUnreachable` |
+| 6 | Verify (Phase 3, #2) on a remote repository works the same way: a throwaway config copy with an empty cache, plus the storage environment | Same code path as folders |
+
 ## Not covered yet
 
 - Running as LocalSystem in a Windows Service (cache/log locations, `%LOCALAPPDATA%` defaults avoided by flags).
 - Volume Shadow Copy under LocalSystem and locked files; paths over 260 characters; symlinks and junctions.
 - ~~Verification~~ done in Phase 3 (above). `RunMaintenanceAsync` stays unsupported: Kopia's server owns
   maintenance (decision 1 below).
-- SMB, SFTP and S3 destinations (only `FileSystemDestination` exists).
+- ~~SFTP and S3 destinations~~ done (above). SMB with its own account is tested only when
+  `CASHGEAR_TEST_SMB_SHARE`/`_USER`/`_PASSWORD` name a real share.
 - A server restart in the middle of a backup: the engine marks the run Failed; any checkpoint Kopia
   saved is not inspected.
 
