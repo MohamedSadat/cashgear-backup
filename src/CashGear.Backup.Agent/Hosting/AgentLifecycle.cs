@@ -32,6 +32,7 @@ internal sealed partial class AgentLifecycle(
     EngineHost engines,
     JobScheduler scheduler,
     RunCoordinator runs,
+    Licensing.LicenceService licences,
     TimeProvider time,
     ILogger<AgentLifecycle> logger) : IHostedService
 {
@@ -75,6 +76,7 @@ internal sealed partial class AgentLifecycle(
     {
         try
         {
+            await licences.ActivatePreseededKeyAsync(ct);
             await using var db = await dbs.CreateDbContextAsync(ct);
             foreach (var destination in await db.Destinations.AsNoTracking().ToListAsync(ct))
             {

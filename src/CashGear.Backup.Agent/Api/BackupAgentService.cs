@@ -26,7 +26,8 @@ internal sealed class BackupAgentService(
     EngineHost engines,
     SettingsStore settings,
     AlertService alerts,
-    IEmailSender email) : Proto.BackupAgent.BackupAgentBase
+    IEmailSender email,
+    Licensing.LicenceService licences) : Proto.BackupAgent.BackupAgentBase
 {
     public override Task<Proto.AgentStatus> GetStatus(Proto.GetStatusRequest request, ServerCallContext context)
     {
@@ -207,6 +208,11 @@ internal sealed class BackupAgentService(
         var update = ProtoMapping.FromProto(request.Settings);
         using (update.NewPassword)
         {
+            if (update.Settings.Email.Enabled)
+            {
+                await licences.RequireAsync(l => l.EmailAlerts, "Email alerts", context.CancellationToken);
+            }
+
             return ProtoMapping.ToProto(await settings.SaveAsync(update, context.CancellationToken));
         }
     }
@@ -236,6 +242,24 @@ internal sealed class BackupAgentService(
         }
 
         return new Proto.SendTestEmailResponse();
+    }
+
+    public override async Task<Proto.LicenceStatus> GetLicence(Proto.GetLicenceRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Read);
+        return ProtoMapping.ToProto(await licences.GetAsync(context.CancellationToken));
+    }
+
+    public override async Task<Proto.LicenceStatus> ActivateLicence(Proto.ActivateLicenceRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Manage);
+        return ProtoMapping.ToProto(await licences.ActivateAsync(request.Key, context.CancellationToken));
+    }
+
+    public override async Task<Proto.LicenceStatus> RemoveLicence(Proto.RemoveLicenceRequest request, ServerCallContext context)
+    {
+        auth.Require(context, AccessLevel.Manage);
+        return ProtoMapping.ToProto(await licences.RemoveAsync(context.CancellationToken));
     }
 
     private async Task<(IBackupEngine Engine, SnapshotInfo Snapshot)> SnapshotAsync(string jobId, string snapshotId, CancellationToken ct)

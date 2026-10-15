@@ -9,7 +9,8 @@ namespace CashGear.Backup.Agent.Destinations;
 
 /// <summary>Adds repositories (new or existing) and remembers them with their DPAPI-protected password.</summary>
 internal sealed partial class DestinationService(
-    IDbContextFactory<StateDbContext> dbs, EngineHost engines, ISecretProtector protector, TimeProvider time, ILogger<DestinationService> logger)
+    IDbContextFactory<StateDbContext> dbs, EngineHost engines, ISecretProtector protector, Licensing.LicenceService licences, TimeProvider time,
+    ILogger<DestinationService> logger)
 {
     /// <summary>The shortest password accepted for a new repository; there is no way to recover a lost one.</summary>
     public const int MinimumPasswordLength = 8;
@@ -38,6 +39,11 @@ internal sealed partial class DestinationService(
         }
 
         var location = input.Validate();
+        if (input.Kind is DestinationKind.Sftp or DestinationKind.S3)
+        {
+            await licences.RequireAsync(l => l.CloudDestinations, "Backing up to SFTP or S3", ct);
+        }
+
         await using var db = await dbs.CreateDbContextAsync(ct);
         if (await db.Destinations.AnyAsync(d => d.Location == location, ct))
         {

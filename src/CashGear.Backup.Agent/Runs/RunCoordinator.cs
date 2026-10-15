@@ -17,7 +17,8 @@ internal sealed record RunUpdate(Guid RunId, RunProgress? Progress, RunRecord? F
 /// result. A backup that cannot start for an operational reason (destination unplugged, source missing)
 /// is still recorded, as a failed run, so the history shows it.
 /// </summary>
-internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> dbs, EngineHost engines, TimeProvider time, ILogger<RunCoordinator> logger)
+internal sealed partial class RunCoordinator(
+    IDbContextFactory<StateDbContext> dbs, EngineHost engines, Licensing.LicenceService licences, TimeProvider time, ILogger<RunCoordinator> logger)
 {
     public const string InterruptedMessage = "The agent stopped during this run (shutdown, crash or power loss).";
 
@@ -80,6 +81,11 @@ internal sealed partial class RunCoordinator(IDbContextFactory<StateDbContext> d
         try
         {
             await InsertAsync(run, ct);
+            if (await licences.BackupBlockedAsync(job, destination, ct) is { } licenceReason)
+            {
+                return await FinishEarlyAsync(run, licenceReason);
+            }
+
             if (!await engines.IsReachableAsync(destination, ct))
             {
                 return await FinishEarlyAsync(run, $"The destination {destination.Location} is not reachable (disconnected drive, offline share or server).");

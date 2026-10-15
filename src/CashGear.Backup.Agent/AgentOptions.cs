@@ -30,12 +30,41 @@ public sealed class AgentOptions
     /// </summary>
     public TimeSpan HousekeepingInterval { get; set; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// The licence server (activation, daily refresh), https://. Empty: none configured, so no key can be activated
+    /// and the Free edition applies.
+    /// </summary>
+    public string LicenceServerUrl { get; set; } = "";
+
+    /// <summary>Public keys (SubjectPublicKeyInfo, base64) whose signature makes a licence token valid.</summary>
+    public List<string> LicencePublicKeys { get; set; } = [];
+
+    /// <summary>Off only for tests and development: every feature on, nothing checked.</summary>
+    public bool LicenceEnforcement { get; set; } = true;
+
+    /// <summary>The signed update feed (https://). Empty: no automatic updates.</summary>
+    public string UpdateManifestUrl { get; set; } = "";
+
+    /// <summary>Public keys (SubjectPublicKeyInfo, base64) whose signature makes the update feed valid.</summary>
+    public List<string> UpdatePublicKeys { get; set; } = [];
+
+    /// <summary>SHA-256 thumbprints of the certificates allowed to sign update MSIs (Authenticode).</summary>
+    public List<string> UpdatePublisherThumbprints { get; set; } = [];
+
+    /// <summary>Install verified updates by themselves once no run is active.</summary>
+    public bool AutomaticUpdates { get; set; } = true;
+
     /// <summary>Also log to the console when not running as a service.</summary>
     public bool WriteToConsole { get; set; } = true;
 
     internal string StateDbPath => Path.Combine(DataDirectory, StateDb.FileName);
     internal string EngineDirectory => Path.Combine(DataDirectory, "engine");
     internal string LogDirectory => Path.Combine(DataDirectory, "logs");
+
+    /// <summary>A licence key left by a silent install ([Licence] Key=...), activated once at start.</summary>
+    internal string LicenceKeyFile => Path.Combine(DataDirectory, "licence.ini");
+
+    internal string UpdateDirectory => Path.Combine(DataDirectory, "updates");
 
     internal IReadOnlyList<string> Validate()
     {

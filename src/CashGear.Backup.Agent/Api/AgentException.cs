@@ -7,6 +7,9 @@ internal enum AgentError
     AlreadyExists,
     FailedPrecondition,
     PermissionDenied,
+
+    /// <summary>The edition in force does not include this (one job, cloud destinations, email alerts).</summary>
+    LicenceRequired,
 }
 
 /// <summary>A request the agent refuses; becomes a gRPC status (see <see cref="ErrorInterceptor"/>).</summary>

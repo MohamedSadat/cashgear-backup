@@ -7,6 +7,48 @@ namespace CashGear.Backup.Agent.Api;
 
 internal static partial class ProtoMapping
 {
+    public static Proto.LicenceStatus ToProto(Licensing.LicenceInfo licence)
+    {
+        var proto = new Proto.LicenceStatus
+        {
+            Edition = licence.Edition switch
+            {
+                Licensing.LicenceEdition.Pro => Proto.Edition.Pro,
+                Licensing.LicenceEdition.Business => Proto.Edition.Business,
+                _ => Proto.Edition.Free,
+            },
+            State = licence.State switch
+            {
+                Licensing.LicenceState.Active => Proto.LicenceState.Active,
+                Licensing.LicenceState.OfflineGrace => Proto.LicenceState.OfflineGrace,
+                Licensing.LicenceState.Lapsed => Proto.LicenceState.Lapsed,
+                _ => Proto.LicenceState.Free,
+            },
+            KeyHint = licence.KeyHint ?? "",
+            Message = licence.Message,
+            MaxJobs = licence.MaxJobs,
+            CloudDestinations = licence.CloudDestinations,
+            EmailAlerts = licence.EmailAlerts,
+            BackupsAllowed = licence.BackupsAllowed,
+        };
+        if (licence.ExpiresAt is { } expires)
+        {
+            proto.ExpiresAt = Timestamp.FromDateTimeOffset(expires);
+        }
+
+        if (licence.GraceUntil is { } grace)
+        {
+            proto.GraceUntil = Timestamp.FromDateTimeOffset(grace);
+        }
+
+        if (licence.LastCheckedAt is { } checkedAt)
+        {
+            proto.LastCheckedAt = Timestamp.FromDateTimeOffset(checkedAt);
+        }
+
+        return proto;
+    }
+
     public static Proto.Alert ToProto(AlertInfo alert) => new()
     {
         Id = alert.Id,

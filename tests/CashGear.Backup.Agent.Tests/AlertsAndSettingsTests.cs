@@ -95,7 +95,7 @@ public class AlertsAndSettingsTests
         var cleared = Settings(port: 2525, password: "");
         cleared.Email.ClearPassword = true;
         Assert.False((await h.Client.UpdateSettingsAsync(new UpdateSettingsRequest { Settings = cleared }, cancellationToken: Ct)).Email.PasswordSaved);
-        Assert.DoesNotContain(MailPassword, ReadLogs(h), StringComparison.Ordinal);
+        Assert.DoesNotContain(MailPassword, h.ReadLogs(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -181,13 +181,6 @@ public class AlertsAndSettingsTests
         await housekeeping.RunOnceAsync(Ct);
         Assert.Equal(2, smtp.Messages.Count);
     }
-
-    private static string ReadLogs(AgentHarness h) => string.Concat(Directory.GetFiles(Path.Combine(h.Data, "logs")).Select(file =>
-    {
-        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }));
 
     private static async Task<List<Alert>> AlertsAsync(AgentHarness h) =>
         [.. (await h.Client.ListAlertsAsync(new ListAlertsRequest(), cancellationToken: Ct)).Alerts];

@@ -51,6 +51,7 @@ internal sealed partial class ErrorInterceptor(ILogger<ErrorInterceptor> logger)
                 AgentError.NotFound => StatusCode.NotFound,
                 AgentError.AlreadyExists => StatusCode.AlreadyExists,
                 AgentError.PermissionDenied => StatusCode.PermissionDenied,
+                AgentError.LicenceRequired => StatusCode.FailedPrecondition,
                 _ => StatusCode.FailedPrecondition,
             }, agent.Error.ToString(), agent.Message),
             BackupEngineException engine => (engine.Kind switch

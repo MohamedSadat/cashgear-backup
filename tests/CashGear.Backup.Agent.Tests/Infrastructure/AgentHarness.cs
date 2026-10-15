@@ -73,6 +73,7 @@ internal sealed class AgentHarness : IAsyncDisposable
             options.EngineExecutablePath = KopiaTestBinary.ExePath;
             options.AllowNonElevatedManage = true;
             options.WriteToConsole = false;
+            options.LicenceEnforcement = false;
             _configure?.Invoke(options);
         });
         await _app.StartAsync(Ct);
@@ -174,6 +175,14 @@ internal sealed class AgentHarness : IAsyncDisposable
     }
 
     public static string ErrorKind(RpcException ex) => ex.Trailers.GetValue("cashgear-error-kind") ?? "";
+
+    /// <summary>Every agent log so far (the running agent keeps the current file open).</summary>
+    public string ReadLogs() => string.Concat(Directory.GetFiles(Path.Combine(Data, "logs")).Select(file =>
+    {
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }));
 
     public async ValueTask DisposeAsync()
     {

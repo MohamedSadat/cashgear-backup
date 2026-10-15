@@ -21,6 +21,7 @@ internal sealed partial class Housekeeping(
     SettingsStore settings,
     AlertService alerts,
     IEmailSender email,
+    Licensing.LicenceService licences,
     TimeProvider time,
     ILogger<Housekeeping> logger) : BackgroundService
 {
@@ -33,6 +34,7 @@ internal sealed partial class Housekeeping(
         try
         {
             var current = await settings.LoadAsync(ct);
+            await licences.RefreshIfDueAsync(ct);
             await StartDueChecksAsync(current, ct);
             await EmailNewAlertsAsync(current, ct);
         }
@@ -128,7 +130,7 @@ internal sealed partial class Housekeeping(
         var emailed = await settings.LoadEmailedAlertsAsync(ct);
         var stillActive = emailed.Where(id => active.Any(a => a.Id == id)).ToHashSet(StringComparer.Ordinal);
         var fresh = active.Where(a => !emailed.Contains(a.Id)).ToList();
-        if (!current.Email.Enabled || fresh.Count == 0)
+        if (!current.Email.Enabled || fresh.Count == 0 || !(await licences.GetAsync(ct)).EmailAlerts)
         {
             if (stillActive.Count != emailed.Count)
             {

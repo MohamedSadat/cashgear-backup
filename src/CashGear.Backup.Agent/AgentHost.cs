@@ -68,6 +68,8 @@ public static class AgentHost
         builder.Services.AddSingleton<JobScheduler>();
         builder.Services.AddSingleton<JobService>();
         builder.Services.AddSingleton<DestinationService>();
+        builder.Services.AddSingleton<Licensing.ILicenceServer, Licensing.HttpLicenceServer>();
+        builder.Services.AddSingleton<Licensing.LicenceService>();
         builder.Services.AddSingleton<SettingsStore>();
         builder.Services.AddSingleton<AlertService>();
         builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();

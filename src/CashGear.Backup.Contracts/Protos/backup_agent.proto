@@ -59,6 +59,21 @@ service BackupAgent {
   // Manage. Sends a test email with the given settings (an empty password uses the saved one). Carries the
   // email password: never log this message.
   rpc SendTestEmail (SendTestEmailRequest) returns (SendTestEmailResponse);
+
+  // The edition in force and what it allows. Without an activated licence: the Free edition.
+  rpc GetLicence (GetLicenceRequest) returns (LicenceStatus);
+  // Manage. Activates a licence key with the licence server for this PC.
+  rpc ActivateLicence (ActivateLicenceRequest) returns (LicenceStatus);
+  // Manage. Back to the Free edition on this PC.
+  rpc RemoveLicence (RemoveLicenceRequest) returns (LicenceStatus);
+
+  rpc GetUpdateStatus (GetUpdateStatusRequest) returns (UpdateStatus);
+  // Operate. Looks for an update now (otherwise once a day); a verified update installs when no run is active.
+  rpc CheckForUpdates (CheckForUpdatesRequest) returns (UpdateStatus);
+
+  // Manage. A zip for support: the agent's recent logs and a summary of destinations, jobs, runs and settings,
+  // without passwords, keys or other secrets, and with user folder names replaced.
+  rpc CreateSupportBundle (CreateSupportBundleRequest) returns (SupportBundle);
 }
 
 message GetStatusRequest {}
@@ -531,3 +546,84 @@ message SendTestEmailRequest {
 }
 
 message SendTestEmailResponse {}
+
+enum Edition {
+  EDITION_UNSPECIFIED = 0;
+  // One job, folder and network-share destinations, no email alerts.
+  EDITION_FREE = 1;
+  // Unlimited jobs, SFTP and S3 destinations, email alerts.
+  EDITION_PRO = 2;
+  // Pro, plus silent installs with a licence key.
+  EDITION_BUSINESS = 3;
+}
+
+enum LicenceState {
+  LICENCE_STATE_UNSPECIFIED = 0;
+  // No licence activated (or it could not be verified): the Free edition.
+  LICENCE_STATE_FREE = 1;
+  LICENCE_STATE_ACTIVE = 2;
+  // The licence server has not been reached for a while; everything works until grace_until.
+  LICENCE_STATE_OFFLINE_GRACE = 3;
+  // The licence ended, or the server was not reached for 30 days: new backups are paused. Restore always works.
+  LICENCE_STATE_LAPSED = 4;
+}
+
+message LicenceStatus {
+  Edition edition = 1;
+  LicenceState state = 2;
+  // The last characters of the key, to tell keys apart; never the key.
+  string key_hint = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  google.protobuf.Timestamp grace_until = 5;
+  google.protobuf.Timestamp last_checked_at = 6;
+  // What the user should know (why it lapsed, why a key was refused).
+  string message = 7;
+  // 0: unlimited.
+  int32 max_jobs = 8;
+  bool cloud_destinations = 9;
+  bool email_alerts = 10;
+  bool backups_allowed = 11;
+}
+
+message GetLicenceRequest {}
+
+// Carries the licence key: never log this message.
+message ActivateLicenceRequest {
+  string key = 1;
+}
+
+message RemoveLicenceRequest {}
+
+enum UpdateState {
+  UPDATE_STATE_UNSPECIFIED = 0;
+  // No update source is configured (no trusted signing key): nothing is checked.
+  UPDATE_STATE_NOT_CONFIGURED = 1;
+  UPDATE_STATE_UP_TO_DATE = 2;
+  // A newer version is published and is being downloaded and verified.
+  UPDATE_STATE_DOWNLOADING = 3;
+  // Downloaded and verified; installs as soon as no backup or restore runs.
+  UPDATE_STATE_READY = 4;
+  UPDATE_STATE_INSTALLING = 5;
+  // The last check or download failed; see message. Tried again later.
+  UPDATE_STATE_FAILED = 6;
+}
+
+message UpdateStatus {
+  string current_version = 1;
+  string available_version = 2;
+  UpdateState state = 3;
+  string message = 4;
+  google.protobuf.Timestamp last_checked_at = 5;
+}
+
+message GetUpdateStatusRequest {}
+
+message CheckForUpdatesRequest {}
+
+message CreateSupportBundleRequest {}
+
+message SupportBundle {
+  string file_name = 1;
+  // A zip file.
+  bytes content = 2;
+}

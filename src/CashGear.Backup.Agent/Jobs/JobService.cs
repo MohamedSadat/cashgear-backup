@@ -61,7 +61,8 @@ internal static class JobMapping
 
 /// <summary>Creates, changes and removes jobs; keeps the engine policy and the schedule in step with state.db.</summary>
 internal sealed partial class JobService(
-    IDbContextFactory<StateDbContext> dbs, EngineHost engines, JobScheduler scheduler, RunCoordinator runs, TimeProvider time, ILogger<JobService> logger)
+    IDbContextFactory<StateDbContext> dbs, EngineHost engines, JobScheduler scheduler, RunCoordinator runs, Licensing.LicenceService licences, TimeProvider time,
+    ILogger<JobService> logger)
 {
     public async Task<IReadOnlyList<JobView>> ListAsync(CancellationToken ct)
     {
@@ -80,6 +81,12 @@ internal sealed partial class JobService(
     {
         var sourcePath = NormalizeSource(input.SourcePath);
         await using var db = await dbs.CreateDbContextAsync(ct);
+        var licence = await licences.GetAsync(ct);
+        if (licence.MaxJobs > 0 && await db.Jobs.CountAsync(ct) >= licence.MaxJobs)
+        {
+            throw new AgentException(AgentError.LicenceRequired, "The Free edition backs up one folder. Activate a Pro licence in Settings to add more backups.");
+        }
+
         await ValidateAsync(db, input with { SourcePath = sourcePath }, ct);
         if (await db.Jobs.AnyAsync(j => j.DestinationId == input.DestinationId && j.SourcePath == sourcePath, ct))
         {
