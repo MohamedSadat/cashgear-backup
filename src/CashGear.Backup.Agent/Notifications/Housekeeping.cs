@@ -11,7 +11,7 @@ namespace CashGear.Backup.Agent.Notifications;
 
 /// <summary>
 /// Every few minutes once the agent is ready: start checks of backups that are due, and email alerts that are new
-/// since the last email (each alert once). Kopia's server owns repository maintenance, so there is none here.
+/// since the last email (each alert once). The engine owns repository maintenance, so there is none here.
 /// </summary>
 internal sealed partial class Housekeeping(
     AgentOptions options,

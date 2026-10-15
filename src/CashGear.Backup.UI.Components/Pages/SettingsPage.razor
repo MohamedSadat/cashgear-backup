@@ -46,7 +46,7 @@
                 <option value="@SmtpSecurity.Tls">TLS (usually port 465)</option>
                 <option value="@SmtpSecurity.None">None (local relay only, no login)</option>
             </select>
-            <label for="smtp-port">Port</label>
+            <label for="smtp-port">Port (0: the usual one)</label>
             <input id="smtp-port" type="number" min="0" max="65535" placeholder="usual" @bind="_settings.Email.SmtpPort" />
         </div>
         <div class="field">

@@ -21,9 +21,18 @@ internal sealed record MergeOutcome
     public string Describe(string into, string stamp)
     {
         var parts = new List<string> { $"Restored into {into}." };
-        if (KeptBoth > 0)
+        if (Moved > 0)
         {
-            parts.Add($"{Plural(KeptBoth, "file was", "files were")} already there and different: they were kept, and the restored copies are next to them with \"(restored {stamp})\" in the name.");
+            parts.Add($"{Plural(Moved, "missing item came", "missing items came")} back.");
+        }
+
+        if (KeptBoth == 1)
+        {
+            parts.Add($"1 file was already there and different: it was kept, and the restored copy is next to it with \"(restored {stamp})\" in its name.");
+        }
+        else if (KeptBoth > 1)
+        {
+            parts.Add($"{KeptBoth} files were already there and different: they were kept, and the restored copies are next to them with \"(restored {stamp})\" in their names.");
         }
 
         if (Identical > 0)

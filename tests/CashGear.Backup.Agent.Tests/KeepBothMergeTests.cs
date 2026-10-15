@@ -108,6 +108,8 @@ public sealed class KeepBothMergeTests : IDisposable
         Assert.Contains("2 files were already there and different", text, StringComparison.Ordinal);
         Assert.Contains("(restored 2026-10-15 1432)", text, StringComparison.Ordinal);
         Assert.Contains("4 identical files", text, StringComparison.Ordinal);
+        Assert.Contains("3 missing items came back", text, StringComparison.Ordinal);
+        Assert.Contains("it was kept", new MergeOutcome { KeptBoth = 1 }.Describe("C:\\x", "s"), StringComparison.Ordinal);
     }
 
     /// <summary>A symbolic link where allowed (Developer Mode or elevation), else a junction: both are reparse points.</summary>

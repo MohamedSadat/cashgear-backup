@@ -180,5 +180,6 @@ td p { margin: 0 0 4px; }
 .search-bar { display: flex; gap: 8px; align-items: center; margin: 10px 0; max-width: 640px; }
 .search-bar input { flex: 1; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
 .search-results { margin-bottom: 14px; }
+.wizard-step + .wizard-step, .wizard-step + .elevation-note { margin-top: 14px; }
 .kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
 .kit-row > span:first-child { flex: 1; }
