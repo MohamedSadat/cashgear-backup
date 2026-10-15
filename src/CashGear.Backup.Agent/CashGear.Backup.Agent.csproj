@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Windows Service: scheduler, gRPC server (named pipe only), notifications, updater. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CashGear.Backup.Core\CashGear.Backup.Core.csproj" />
+    <ProjectReference Include="..\CashGear.Backup.Engine.Kopia\CashGear.Backup.Engine.Kopia.csproj" />
+    <ProjectReference Include="..\CashGear.Backup.Data\CashGear.Backup.Data.csproj" />
+    <ProjectReference Include="..\CashGear.Backup.Contracts\CashGear.Backup.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

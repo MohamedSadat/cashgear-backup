@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The only project that knows Kopia exists: process host, REST client, DTOs, policy mapping. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CashGear.Backup.Engine.Kopia.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CashGear.Backup.Core\CashGear.Backup.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- EF Core + SQLite state.db: jobs, runs, settings, licence (Phase 1). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CashGear.Backup.Core\CashGear.Backup.Core.csproj" />
+  </ItemGroup>
+
+</Project>

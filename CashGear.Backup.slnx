@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CashGear.Backup.Agent/CashGear.Backup.Agent.csproj" />
+    <Project Path="src/CashGear.Backup.Contracts/CashGear.Backup.Contracts.csproj" />
+    <Project Path="src/CashGear.Backup.Core/CashGear.Backup.Core.csproj" />
+    <Project Path="src/CashGear.Backup.Data/CashGear.Backup.Data.csproj" />
+    <Project Path="src/CashGear.Backup.Desktop/CashGear.Backup.Desktop.csproj" />
+    <Project Path="src/CashGear.Backup.Engine.Kopia/CashGear.Backup.Engine.Kopia.csproj" />
+    <Project Path="src/CashGear.Backup.UI.Components/CashGear.Backup.UI.Components.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CashGear.Backup.Agent.Tests/CashGear.Backup.Agent.Tests.csproj" />
+    <Project Path="tests/CashGear.Backup.Core.Tests/CashGear.Backup.Core.Tests.csproj" />
+    <Project Path="tests/CashGear.Backup.Engine.Kopia.IntegrationTests/CashGear.Backup.Engine.Kopia.IntegrationTests.csproj" />
+    <Project Path="tests/CashGear.Backup.UI.Components.Tests/CashGear.Backup.UI.Components.Tests.csproj" />
+  </Folder>
+</Solution>
