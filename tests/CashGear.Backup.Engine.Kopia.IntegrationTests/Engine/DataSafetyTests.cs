@@ -279,7 +279,8 @@ public class DataSafetyTests
         var ex = await Assert.ThrowsAsync<BackupEngineException>(() => h.Engine.ListSnapshotsAsync(h.Job(), Ct));
         Assert.Equal(BackupErrorKind.RepositoryNotConnected, ex.Kind);
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => h.Engine.VerifyAsync(h.Job(), 0.05, Ct));
+        var verify = await Assert.ThrowsAsync<BackupEngineException>(() => h.Engine.VerifyAsync(h.Job(), 0.05, Ct));
+        Assert.Equal(BackupErrorKind.RepositoryNotConnected, verify.Kind);
     }
 
     private static bool IsImage(Process process, string path)

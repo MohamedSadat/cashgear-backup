@@ -94,4 +94,14 @@ public static class SnapshotPath
     }
 }
 
-public sealed record VerifyResult(bool Passed, long ItemsChecked, IReadOnlyList<string> Errors);
+/// <summary>The outcome of <see cref="IBackupEngine.VerifyAsync"/>.</summary>
+/// <param name="Passed">No damage or missing data was found.</param>
+/// <param name="ItemsChecked">Objects (files and folders) whose structure was checked.</param>
+/// <param name="Errors">What was found, for the user; may name files, never secrets.</param>
+public sealed record VerifyResult(bool Passed, long ItemsChecked, IReadOnlyList<string> Errors)
+{
+    /// <summary>Files whose contents were read back from the destination (the sample).</summary>
+    public long FilesRead { get; init; }
+
+    public long BytesRead { get; init; }
+}
