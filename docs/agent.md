@@ -31,6 +31,12 @@ over a local named pipe.
   the pipe lets in. **Manage** (create or connect destinations, create, change or delete jobs, restore) needs
   an elevated administrator or SYSTEM. `Agent:AllowNonElevatedManage` lifts that for tests and development
   and must stay `false` in the shipped appsettings.json.
+- **Decided 2026-10-15: Manage stays admin-only, and the desktop app asks for elevation (UAC) when it needs
+  it.** The app runs as the user for everything Read and Operate. Setting up destinations or jobs and
+  starting a restore go through an elevated process (the app relaunched elevated, or a small elevated
+  helper) whose connection then carries an elevated token. `AgentStatus.caller_can_manage` tells the app
+  whether its current connection may make Manage calls; a Manage call without it fails with
+  `PermissionDenied`.
 
 ## Behaviour worth knowing
 
@@ -62,10 +68,9 @@ over a local named pipe.
 
 ## For review (CLAUDE.md rule 10)
 
-1. **Manage needs elevation** (security). The Phase 2 UI must either run elevated for setup and restore,
-   or we relax the rule, for example allowing the interactive user to manage jobs whose source and restore
-   target are inside their own profile. Without it a standard user could make the LocalSystem agent read
-   another user's files or write into protected folders.
+1. ~~Manage needs elevation~~ **Decided:** admin-only, with UAC prompts in the desktop app (see "Security
+   model"). Relaxing it would let a standard user make the LocalSystem agent read another user's files or
+   write into protected folders.
 2. **Browse is Read-level:** any interactive user can list file names inside any job's snapshots.
 3. **DPAPI machine scope** (plan). Protection then rests on state.db's ACL (SYSTEM and Administrators,
    applied by the installer in Phase 4). `CurrentUser` scope under LocalSystem would bind blobs to the SYSTEM

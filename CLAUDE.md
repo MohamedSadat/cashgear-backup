@@ -11,7 +11,7 @@ customer sees is .NET 10 C#.
 - **Agent design, security model and its findings:** [docs/agent.md](docs/agent.md).
 - **Status:** Foundation, Phase 0 and Phase 1 done: the Kopia engine behind `IBackupEngine` (1a) and the
   agent with state.db, schedules and the gRPC pipe API (1b). Next: Phase 2, the desktop app, against
-  `backup_agent.proto`. Open decisions are at the end of FINDINGS and of docs/agent.md.
+  `backup_agent.proto`; it requests UAC elevation for Manage calls (docs/agent.md, "Security model"). Open decisions are at the end of FINDINGS and of docs/agent.md.
 
 ## Architecture
 
@@ -68,7 +68,8 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
     mistakes there cost customer data.
 11. **The agent runs as LocalSystem; the pipe API is its attack surface.** Calls that make it read or
     write a folder the caller names (destinations, jobs, restore) are Manage-level and need an elevated
-    administrator; `Agent:AllowNonElevatedManage` is for tests only. Never impersonate the pipe client
+    administrator (decided: the desktop app asks for UAC elevation for them; never relax it);
+    `Agent:AllowNonElevatedManage` is for tests only. Never impersonate the pipe client
     on a request thread (docs/agent.md, finding 1), and never log gRPC request messages (they can carry
     passwords).
 
