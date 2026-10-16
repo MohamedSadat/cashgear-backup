@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using CashGear.Backup.Hardening.Tests.Infrastructure;
+using CashGear.Backup.Testing;
 
 namespace CashGear.Backup.Hardening.Tests;
 

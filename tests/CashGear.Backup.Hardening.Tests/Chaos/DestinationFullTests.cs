@@ -1,5 +1,6 @@
 using CashGear.Backup.Contracts.V1;
 using CashGear.Backup.Hardening.Tests.Infrastructure;
+using CashGear.Backup.Testing;
 using static CashGear.Backup.Hardening.Tests.Chaos.Recovery;
 
 namespace CashGear.Backup.Hardening.Tests.Chaos;

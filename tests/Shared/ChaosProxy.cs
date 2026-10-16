@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
-namespace CashGear.Backup.Hardening.Tests.Infrastructure;
+namespace CashGear.Backup.Testing;
 
 /// <summary>
 /// A TCP proxy on 127.0.0.1 in front of a test server, standing in for the network between the PC and a remote

@@ -3,9 +3,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
-using CashGear.Backup.Testing;
 
-namespace CashGear.Backup.Hardening.Tests.Infrastructure;
+namespace CashGear.Backup.Testing;
 
 /// <summary>
 /// The pinned SFTPGo in serve mode with one user whose disk quota is limited: a NAS that runs out of space. Writes
