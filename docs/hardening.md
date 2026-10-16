@@ -18,7 +18,7 @@ skipped ("Not run (due to explicit test filtering)"), and runs only the project'
 ## Running them
 
 ```powershell
-# Chaos suite (about 70 minutes with the defaults; most of it waiting for runs to end under a dead network)
+# Chaos suite (about 45 minutes with the defaults; 4 to 6 minutes per test)
 dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-trait "Category=Chaos"
 
 # Scale suite, small variant (a few minutes): 20,000 files and a 1 GB file
@@ -46,7 +46,7 @@ xUnit's own command line instead: `CashGear.Backup.Hardening.Tests.exe -explicit
 | Variable | Default | What |
 |---|---|---|
 | `CASHGEAR_CHAOS_SOURCE_MB` | 1024 | Data each chaos test backs up when its fault hits. A test fails, saying so, if the backup ended before the fault: raise it on a fast machine |
-| `CASHGEAR_CHAOS_FAULT_WAIT_MIN` | 3 | How long a run that lost its destination may go on before the test cancels it (finding 3) |
+| `CASHGEAR_CHAOS_FAULT_WAIT_MIN` | 2.5 | How long after the fault a run that lost its destination may take to end by itself (the engine ends it after 90 s of failed writes, finding 3). A run still going then is cancelled and the test fails |
 | `CASHGEAR_SCALE_FILES` | 20000 | Files in the many-files scenario (0 to 8 KiB each, random) |
 | `CASHGEAR_SCALE_BIG_FILE_GB` | 1 | Size of the single file in the big-file scenario, in GB (10^9 bytes) |
 | `CASHGEAR_SCALE_DIR` | `%TEMP%\cashgear-scale` | Sources (kept between runs and reused while the size matches), repositories, restores, and `progress.log` to follow a long run |
@@ -77,10 +77,10 @@ through. Then `Chaos/Recovery.cs` asserts the same thing for every fault:
 | Test | Fault |
 |---|---|
 | `AgentCrashTests.Agent_killed_mid_backup_takes_kopia_down_and_the_next_run_succeeds` | `TerminateProcess` on the agent only (a crash or power cut of the service). The kopia server must exit with it (the engine's kill-on-close Job Object), and the restarted agent must record the run as Failed ("The agent stopped during this run") |
-| `AgentCrashTests.Kopia_server_killed_mid_backup_fails_the_run_and_the_next_run_succeeds` | The kopia server process is killed while the agent lives; the engine starts a new one |
-| `NetworkDropTests.Network_down_mid_backup_never_succeeds_and_the_next_run_does` (SFTP, S3) | A TCP proxy between the agent and the test server resets every connection and every new one. The network stays down; the run is cancelled (as a user would) if it has not ended `CASHGEAR_CHAOS_FAULT_WAIT_MIN` (3) minutes later, then the network comes back |
+| `AgentCrashTests.Kopia_server_killed_mid_backup_fails_the_run_and_the_next_run_succeeds` | The kopia server process is killed while the agent lives. The run must be Failed with "The backup engine stopped during the run (its process ended unexpectedly)", and the engine must start a new server within 20 s (it does so when the process exits, not at the next health check) |
+| `NetworkDropTests.Network_down_mid_backup_never_succeeds_and_the_next_run_does` (SFTP, S3) | A TCP proxy between the agent and the test server resets every connection and every new one. The network stays down; the run must end by itself within `CASHGEAR_CHAOS_FAULT_WAIT_MIN` (2.5) minutes as Failed, "Lost the destination: it could not be reached ...". Then the network comes back |
 | `NetworkDropTests.Network_back_after_an_outage_mid_backup_never_leaves_a_bad_restore_point` (SFTP, S3; 5 s and 60 s) | The network is down for 5 s (inside Kopia's retries) or 60 s (longer than them) and comes back while the run goes on |
-| `DestinationFullTests.A_full_sftp_destination_fails_the_run_and_once_space_is_freed_the_next_run_succeeds` | SFTPGo in serve mode with a per-user quota: room for the first restore point and half the new data. Then the server restarts without a quota (space freed) |
+| `DestinationFullTests.A_full_sftp_destination_fails_the_run_and_once_space_is_freed_the_next_run_succeeds` | SFTPGo in serve mode with a per-user quota: room for the first restore point and half the new data. The run must end by itself as Failed, "Lost the destination: it is full ...". Then the server restarts without a quota (space freed) |
 | `DestinationFullTests.A_full_local_disk_fails_the_run_and_once_space_is_freed_the_next_run_succeeds` | A small VHDX volume mounted into a folder, mostly taken by another file; then that file is deleted. **Needs an elevated prompt** (attaching a VHDX); skipped otherwise |
 
 ## Scale suite
@@ -165,11 +165,70 @@ the way:
 | # | Observed | Consequence |
 |---|---|---|
 | 1 | **Agent killed**: the kopia server exits with it (the engine's Job Object), the restarted agent records the run Failed ("The agent stopped during this run"), and the next run succeeds in 10 to 30 s, reusing what the killed run had uploaded | Works as designed |
-| 2 | **Kopia server killed** while the agent runs: the run is Failed, but its message is "Following the run failed: A task was canceled." (or "The operation was canceled."), and the agent logs it as an error with a stack trace. When the health check (every 30 s) restarts the server, `KopiaProcessHost.RestartAsync` disposes the old `HttpClient` while `MonitorBackupAsync` is polling it; that cancellation is not a `TimeoutException`, so `IsKopiaFailure` does not match and the generic catch reports it. Until the health check notices, the dead server stays current, so a run started in that window fails too | Rule 5 holds. Follow-up: report "the backup engine restarted during the run" and restart the server as soon as the process exits (`Process.Exited`) rather than at the next health check |
-| 3 | **Destination lost mid-run** (network down, or the NAS full): Kopia does not fail the snapshot. It retries each pack write 10 times (about 11 s), records that file as failed, and goes on with the next file. 6.5 minutes after the network to an SFTP server went down, a 1 GB run had failed 7 of the 24 remaining files (546 retried writes) and was still running; the full NAS behaved the same. **Cancelling does not help much while the destination is gone**: the cancel took 5 s and 100 s (full NAS), 6 min (SFTP down) and 14 min (S3 down). In the S3 case the kopia server stopped answering its health check meanwhile, the engine restarted it, the new server could not open the repository, and the run was finally recorded Failed with "The backup engine ... is restarting; try again later." A run of a large folder to an unplugged NAS would show "running" for hours, and block the job's next runs meanwhile | Rule 5 held every time: the run ended Failed (Kopia's task fails with the storage error, for example `denying write due to space limit`). The tests cancel after `CASHGEAR_CHAOS_FAULT_WAIT_MIN` and wait for the cancel. Follow-up: the engine should end a run whose destination has gone (reachability probe, or a rising error count with no progress) and record it Failed without waiting for Kopia |
+| 2 | **Kopia server killed** while the agent runs: the run is Failed, but its message is "Following the run failed: A task was canceled." (or "The operation was canceled."), and the agent logs it as an error with a stack trace. When the health check (every 30 s) restarts the server, `KopiaProcessHost.RestartAsync` disposes the old `HttpClient` while `MonitorBackupAsync` is polling it; that cancellation is not a `TimeoutException`, so `IsKopiaFailure` does not match and the generic catch reports it. Until the health check notices, the dead server stays current, so a run started in that window fails too | Rule 5 holds. **Fixed** (below): the run is Failed with "The backup engine stopped during the run (its process ended unexpectedly) ...", logged as a warning without a stack, and the server is restarted as soon as its process exits |
+| 3 | **Destination lost mid-run** (network down, or the NAS full): Kopia does not fail the snapshot. It retries each pack write 10 times (about 11 s), records that file as failed, and goes on with the next file. 6.5 minutes after the network to an SFTP server went down, a 1 GB run had failed 7 of the 24 remaining files (546 retried writes) and was still running; the full NAS behaved the same. **Cancelling does not help much while the destination is gone**: the cancel took 5 s and 100 s (full NAS), 6 min (SFTP down) and 14 min (S3 down). In the S3 case the kopia server stopped answering its health check meanwhile, the engine restarted it, the new server could not open the repository, and the run was finally recorded Failed with "The backup engine ... is restarting; try again later." A run of a large folder to an unplugged NAS would show "running" for hours, and block the job's next runs meanwhile | Rule 5 held every time: the run ended Failed (Kopia's task fails with the storage error, for example `denying write due to space limit`). **Fixed** (below): the engine ends the run itself as Failed, "Lost the destination: ...", once Kopia's writes have failed for 90 s, and the tests now require that |
 | 4 | **Network back while the run goes on**: after 5 s, Kopia's retries ride it out and the run Succeeds with a whole snapshot (restored byte for byte by the test). After 60 s, the run ends CompletedWithWarnings with 19 (SFTP) or 22 (S3) files "could not be backed up": a restore point with warnings, as rule 5 intends. The next run picks those files up and Succeeds | Works as designed |
 | 5 | The agent's check (`kopia snapshot verify`) fails on a single connection reset while listing blobs (`unable to list blobs: ... forcibly closed by the remote host`); reading blobs is retried 10 times, listing is not. Seen through a bug in the test's proxy (since fixed), not on a healthy network | A flaky network could raise a false "check failed" alert; low priority |
 | 6 | **Full NAS, then space freed**: once in seven runs, the agent's check after recovery could not read one pack from SFTPGo (`permission denied` when opening `p/f84/...f`, after 10 retries), although the run after recovery Succeeded and the other runs verified clean | Not explained yet; see "Open" below |
+
+## How the engine ends a run that lost its destination (findings 2 and 3)
+
+**Destination lost (finding 3).** Kopia never fails a snapshot because its destination went away, and neither its
+`Errors` counter (it lags by whole files) nor `Uploaded Bytes` (it rises during the outage) shows it. Its task log
+does: every write it retries and every write it gives up on (FINDINGS.md, Phase 5). While a backup runs, the engine
+reads that log every 2 s (`Runs/DestinationWatch`) and ends the run when
+
+1. Kopia has **given up at least one write**: some files have already failed, so the run can no longer record a
+   complete restore point (rule 5); retries that Kopia wins never count, and
+2. its storage errors have gone on for **90 s** (`KopiaEngineOptions.DestinationLossWindow`) with no pause of
+   **30 s** (`DestinationQuietPeriod`); a pause that long means writes go through again and the count starts afresh.
+   During the observed outages a storage error came at least every 8.5 s.
+
+The run is then recorded **Failed** (Canceled if the user had already asked to cancel) with no restore point and one
+of three messages, from the most telling words seen during the outage: "Lost the destination: it is full ...", "...
+it refused every write ... (access denied) ...", or "... it could not be reached for 90 s ...". The engine cancels
+Kopia's upload and keeps the job's folder reserved until Kopia's task has really ended (it re-sends the cancel every
+second), so a new run never starts on top of it: a new run waits up to 30 s (`StoppingRunWait`), then is refused,
+"The last backup of ... lost its destination and Kopia is still stopping it". Kopia's last storage error goes to the
+agent's log as a warning.
+
+Before choosing the rule the session watched what Kopia shows (FINDINGS.md, Phase 5): first give-up 9 s (SFTP), 10 s
+(full SFTPGo), 49 s (S3) and 3 s (a folder that refuses writes) after the fault. A TCP reachability probe was
+considered and left out: it cannot see a full NAS, and Kopia's own errors already say "space limit", "Access is
+denied" or "unable to dial". A 60 s outage stays below the window, so finding 4 is unchanged.
+
+**Kopia server killed (finding 2).** `KopiaProcessHost.IsCurrent(generation)` is false as soon as a server is being
+replaced (before its client is disposed), and a monitor whose poll fails on a replaced server records "The backup
+engine stopped during the run (its process ended unexpectedly); the run was lost ..." (or "(it stopped answering)").
+The health loop waits on the process's exit as well as on its 30 s timer, so a dead server is replaced at once.
+
+Both change how runs end: **hand review (CLAUDE.md rule 10)** `Runs/DestinationWatch.cs`, the monitor and
+`DrainAsync` in `KopiaBackupEngine.Runs.cs`, and `HealthLoopAsync` in `Hosting/KopiaProcessHost.cs`.
+
+**Chaos suite after the fix** (2026-10-16, same machine and defaults as above): 9 passed, 1 skipped (local disk
+full, needs elevation), 44 minutes. Every faulted run ended by itself and every repository verified clean (agent
+check at 100 % and the independent kopia check), with both restore points byte-identical.
+
+| Test | Faulted run | Ended | Next run |
+|---|---|---|---|
+| Network down, SFTP | Failed, "Lost the destination: it could not be reached for 92 s ..." | 93 s after the cut | Succeeded |
+| Network down, S3 | Failed, "Lost the destination: it could not be reached for 94 s ..." | 99 s after the cut | Succeeded |
+| Full SFTP destination | Failed, "Lost the destination: it is full and refused every write for 90 s ..." | 94 s after it was full | Succeeded |
+| Kopia server killed | Failed, "The backup engine stopped during the run (its process ended unexpectedly) ..." | 10 s after the kill | Succeeded |
+| Network back after 60 s (SFTP, S3) | CompletedWithWarnings, 21 and 16 files not backed up (below the 90 s window, as intended) | by itself | Succeeded |
+| Network back after 5 s (SFTP, S3) | Succeeded, restored byte for byte | by itself | Succeeded |
+| Agent killed | Failed, "The agent stopped during this run ..." | at the agent's restart | Succeeded |
+
+Known limits:
+
+- A network that drops packets instead of refusing them (no reset) makes each attempt wait for TCP timeouts (21 s to
+  connect on Windows): the first give-up, and so the end of the run, can then take several minutes. Not reproduced:
+  the chaos proxy resets connections.
+- The task log keeps 1,000 lines; a burst of failing small files can push storage errors out between two reads. An
+  outage keeps adding new ones, so the rule still fires, possibly later.
+- Restores are not watched this way; a restore whose destination goes away ends when Kopia gives up.
+- The local disk-full wording is Windows' "There is not enough space on the disk." (unit-tested, not observed: the
+  VHDX test needs an elevated run).
 
 ## Open
 
@@ -178,9 +237,8 @@ the way:
   real NAS can do the same. Until then, a failing `A_full_sftp_destination...` run is not proof of a product bug.
 - **The local disk-full test** has not been run here (the session was not elevated). Run it once from an elevated
   prompt: `dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-method "*A_full_local_disk*"`.
-- **Findings 2 and 3 are product work** for the engine (CLAUDE.md rule 10 applies: they decide how runs end): end a
-  run whose destination has gone instead of waiting for Kopia, give the dead-server case its own message, and restart
-  the server when its process exits. The chaos tests are the acceptance tests for both.
+- **Findings 2 and 3 are fixed but need hand review** (rule 10, see above), and the 90 s window should be checked on a
+  real NAS and a real S3 service during the beta: unplug the network, pull a USB disk, fill a share.
 - **The 200 GB restore and the 1M-file byte-compare** were not completed in the first full run (hours on a hard disk;
   see the results). Run them on the release machine with `CASHGEAR_SCALE_RESTORE` on, ideally with the destination
   and restore target on different disks.

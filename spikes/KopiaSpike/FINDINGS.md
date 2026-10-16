@@ -144,6 +144,24 @@ and the agent's `RemoteDestinationTests.cs`.
 | 5 | Wrong S3 keys come back as prose (`The request signature we calculated does not match...`, `The AWS Access Key Id you provided does not exist...`), not as a status code | `KopiaBackupEngine.StorageFailure` maps those phrases to `DestinationAccessDenied`; anything else is `DestinationUnreachable` |
 | 6 | Verify (Phase 3, #2) on a remote repository works the same way: a throwaway config copy with an empty cache, plus the storage environment | Same code path as folders |
 
+## Phase 5: destination lost, server killed
+
+Observed against the same pinned binary (2026-10-16) while fixing chaos findings 2 and 3 (docs/hardening.md): the
+engine backed up 256 MB of random data at 8 MB/s and the test cut the network (every connection reset, through the
+chaos proxy), filled an SFTPGo quota, or denied writes on a destination folder. Covered by `Engine/DestinationLostTests.cs`,
+`Engine/EngineRestartTests.cs` and `Unit/DestinationWatchTests.cs`.
+
+| # | Observed | Consequence |
+|---|---|---|
+| 1 | **A lost destination never fails the snapshot.** Kopia retries each write, then gives up on it, fails the files in that pack and goes on with the next ones. SFTP and S3: 10 retries in about 11 s; a folder: 2 retries | The engine ends such a run itself (`Runs/DestinationWatch`, below) |
+| 2 | `GET /api/v1/tasks/{id}/logs` returns `{"logs":[{"level","ts","mod","msg",...}]}`, oldest first; level 0 debug to 3 error, `ts` Unix seconds. It keeps the **last 1,000 lines** (a backup of 1,500 locked files kept lines 501 to 1,500). A clean 6,000-file backup logs 15 lines | Read every 2 s; only lines newer than the last one read count |
+| 3 | Each retried write: level 0, mod `retry`, `got error <error> when PutBlob(<blob>) (#N), sleeping for <d> before retrying`. Each give-up: level 3, mod `object`, `async write error: unable to write content chunk 0 of FILE:<name>: ... unable to complete PutBlob(<blob>) despite 10 retries: <error>`. A folder logs no retries and gives up as `unable to complete PutBlobInPath:<file> despite 2 retries` | `DestinationWatch.Classify` matches `Blob(`, `Blobs(`, `BlobInPath:`, `BlobFromPath:` with `despite ... retries` or `before retrying`; source read errors never match |
+| 4 | First give-up after the fault: SFTP 9 s, full SFTPGo 10 s, S3 49 s, folder 3 s. Storage-failure lines then came at most **8.5 s apart** (S3; 3.8 s for SFTP) for as long as the outage lasted | 90 s window, 30 s quiet period |
+| 5 | The `Errors` counter stays 0 until the files whose packs failed are finished (49 s for SFTP); `Uploaded Bytes` keeps rising during the outage (it counts finished `PutBlob` calls, failed ones too); `upload.lastError` in `/sources` stays empty | None of these can tell a lost destination; the task log can |
+| 6 | Full SFTPGo: retries say `denying write due to space limit`, the give-up `cannot create temporary file: ... permission denied`, the task error `upload error: permission denied`. A folder that refuses writes: `Access is denied.` | The worst wording seen during the outage decides the message: full, then access denied, then unreachable |
+| 7 | With only 64 files Kopia did end the task by itself, FAILED with `upload error: ...`, once every file had been tried (SFTP after 62 s, the folder after 60 s); S3 was still running after 4 minutes. After the engine's cancel the task ended 4 to 7 s later here (1 GB in the chaos runs: 5 s to 14 min) | The engine keeps the folder reserved until Kopia's task has ended (`DrainAsync`); a new run waits up to 30 s, then is refused with RunAlreadyActive ("still stopping") |
+| 8 | **Kopia server killed mid-run**: the restart disposed the old instance's `HttpClient` under the monitor's poll, which then threw `TaskCanceledException` without a `TimeoutException` inside (so not `IsKopiaFailure`): "Following the run failed: A task was canceled." | The host's `IsCurrent(generation)` turns false before the client is disposed, and any poll failure on a replaced server reports "The backup engine stopped during the run (its process ended unexpectedly)". The health loop also wakes on `Process.Exited` and restarts at once (was: next 30 s check) |
+
 ## Not covered yet
 
 - Running as LocalSystem in a Windows Service (cache/log locations, `%LOCALAPPDATA%` defaults avoided by flags).
@@ -177,3 +195,9 @@ These touch passwords, deletion, retention or restore (CLAUDE.md rule 10), or ch
    with several folders maps to several engine jobs.
 7. **Connecting with an existing local config** does not compare the config's storage location with the
    destination passed in; moving a destination needs its own flow (Phase 2).
+8. **Ending a backup whose destination is lost (Phase 5, rule 10):** the engine records a backup Failed ("Lost the
+   destination: ...") once Kopia has given up at least one write and its storage errors have gone on for 90 s
+   without a 30 s pause (`KopiaEngineOptions.DestinationLossWindow`/`DestinationQuietPeriod`), and cancels Kopia's
+   upload. Review: the rule only ends runs that can no longer record a complete restore point (a given-up write
+   fails files); a 60 s outage stays below it (the run still ends CompletedWithWarnings, chaos finding 4); retries
+   that Kopia wins never count. The folder stays reserved until Kopia's task has really ended.

@@ -18,8 +18,10 @@ customer sees is .NET 10 C#.
   MSI on clean machines, and configure the licence server, update feed and signing certificate (installer
   README). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
 - **Phase 5 (beta and hardening):** the chaos and scale suites exist (`tests/CashGear.Backup.Hardening.Tests`,
-  [docs/hardening.md](docs/hardening.md): how to run them, what they found, and the scale results per release). Still
-  open: the 10-20 machine beta and the help docs.
+  [docs/hardening.md](docs/hardening.md): how to run them, what they found, and the scale results per release). Chaos
+  findings 2 and 3 are fixed: the engine ends a backup whose destination is lost (`Runs/DestinationWatch`) and
+  reports a kopia server that died; both await hand review (rule 10). Still open: the 10-20 machine beta and the help
+  docs.
 
 ## Architecture
 
@@ -158,13 +160,13 @@ engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KE
 | `tools/kopia/` | Kopia pin, fetch script, LICENSE (exe is gitignored) |
 | `tools/test-servers/` | Pins and fetch script for the SFTP and S3 servers the tests run (binaries gitignored) |
 | `tools/notices/` | Generates `THIRD-PARTY-NOTICES.txt` (repo root; shipped beside the app); `collect-kopia-go-modules.ps1` records the Go modules in `kopia.exe` and their licence files, `collect-kopia-webui-packages.ps1` the npm packages in Kopia's web UI inside it (rerun both after a pin change) |
-| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest) |
+| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest, test servers, the chaos proxy that cuts the network and the quota-limited SFTP server) |
 | `tests/CashGear.Backup.Client.Tests` | `AgentClient`, the pipe-server check and the elevated-helper relay against the agent hosted in-process (links `AgentHarness`) |
 | `tests/CashGear.Backup.UI.Components.Tests` | bUnit tests of the pages and components against a fake `IAgentClient`, plus the view models |
 | `tests/CashGear.Backup.Agent.Tests` | state.db, DPAPI, schedules, pipe ACL, and the whole agent hosted in-process on a private pipe, driven through `AgentChannel` against the pinned kopia.exe |
 | `tests/CashGear.Backup.Installer.Tests` | The built MSI's tables (service, ACL, shortcut, licence key, uninstall keeps data) |
 | `tests/CashGear.Backup.Engine.Kopia.IntegrationTests` | `Contract/` one test per Kopia endpoint, `Engine/` round trips and data-safety rules through `IBackupEngine`, `Hosting/` process host, `Unit/` no-Kopia checks |
-| `tests/CashGear.Backup.Hardening.Tests` | Phase 5 suites (explicit tests): `Chaos/` agent or kopia killed, network cut (SFTP, S3), destination full, each followed by a successful run and a clean repository check; `Scale/` many small files and one big file, timed with peak memory into `artifacts\scale\results.jsonl`. `Infrastructure/` runs the agent as its own process in a Job Object, a TCP proxy that cuts the network, a quota-limited SFTP server, a VHDX volume, an independent kopia consistency check |
+| `tests/CashGear.Backup.Hardening.Tests` | Phase 5 suites (explicit tests): `Chaos/` agent or kopia killed, network cut (SFTP, S3), destination full, each followed by a successful run and a clean repository check; `Scale/` many small files and one big file, timed with peak memory into `artifacts\scale\results.jsonl`. `Infrastructure/` runs the agent as its own process in a Job Object, a VHDX volume, an independent kopia consistency check |
 | `spikes/KopiaSpike` | Phase 0 throwaway spike and its tests; lift proven code into Engine.Kopia, then delete |
 | `docs/plan/` | Plan snapshots |
 
