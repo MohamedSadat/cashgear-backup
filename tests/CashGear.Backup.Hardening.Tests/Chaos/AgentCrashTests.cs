@@ -58,12 +58,15 @@ public sealed class AgentCrashTests
         server.Kill();
         await server.WaitForExitAsync(Ct);
 
+        var sinceKill = System.Diagnostics.Stopwatch.StartNew();
         var faulted = await agent.WatchToEndAsync(run.Id, RunTimeout, Ct);
+        Log($"the run ended {sinceKill.Elapsed.TotalSeconds:N1} s after the kill");
         AssertNotSucceeded(faulted);
         Assert.Equal(RunState.Failed, faulted.State);
+        Assert.StartsWith("The backup engine stopped during the run (its process ended unexpectedly)", faulted.Message, StringComparison.Ordinal);
 
-        // The engine notices the dead server at its next health check and starts a new one.
-        await WaitForAsync(() => agent.Processes(AgentProcess.KopiaProcessName).Any(p => p.Id != server.Id), TimeSpan.FromMinutes(2),
+        // The engine starts a new server as soon as the old one's process ends (finding 2), not at its next health check (30 s).
+        await WaitForAsync(() => agent.Processes(AgentProcess.KopiaProcessName).Any(p => p.Id != server.Id), TimeSpan.FromSeconds(20),
             "the engine to start a new kopia server");
         await AssertRecoversAsync(agent, job, destination, [before]);
     }

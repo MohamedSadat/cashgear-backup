@@ -45,8 +45,9 @@ internal static class Recovery
     }
 
     /// <summary>
-    /// Lets a run whose destination failed under it go on for <see cref="HardeningSettings.ChaosFaultWait"/>; if it has
-    /// not ended by then, cancels it through the agent like a user would, and waits for that. Logs which happened.
+    /// A run whose destination failed under it must end by itself (the engine ends it once Kopia's writes have failed
+    /// for 90 s; docs/hardening.md, finding 3) within <see cref="HardeningSettings.ChaosFaultWait"/> of the fault. If it
+    /// has not, the test cancels it through the agent, as a user would, and fails.
     /// </summary>
     public static async Task<Run> EndFaultedRunAsync(AgentProcess agent, string runId, Stopwatch sinceFault)
     {
@@ -71,7 +72,15 @@ internal static class Recovery
         await agent.Client.CancelRunAsync(new CancelRunRequest { RunId = runId }, cancellationToken: Ct);
         var canceled = await agent.WatchToEndAsync(runId, RunTimeout, Ct);
         Log($"the cancel took {stopwatch.Elapsed.TotalSeconds:N1} s: {canceled.State}");
+        Assert.Fail($"The run whose destination was lost had not ended by itself {wait.TotalSeconds:N0} s after the fault; it was cancelled ({canceled.State}).");
         return canceled;
+    }
+
+    /// <summary>The engine's message for a run it ended because the destination went away (Runs/DestinationWatch).</summary>
+    public static void AssertLostDestination(Run run, string expectedStart)
+    {
+        Assert.Equal(RunState.Failed, run.State);
+        Assert.StartsWith(expectedStart, run.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Polls until <paramref name="condition"/> holds.</summary>

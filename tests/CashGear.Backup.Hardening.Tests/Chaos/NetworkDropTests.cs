@@ -16,8 +16,8 @@ public sealed class NetworkDropTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
-    /// The network stays down: the run must not succeed (it fails, or is cancelled once it has run on for a while),
-    /// and once the network is back the next run succeeds.
+    /// The network stays down: the run must not succeed, and must end by itself (the engine ends it as "Lost the
+    /// destination" once Kopia's writes have failed for 90 s). Once the network is back the next run succeeds.
     /// </summary>
     [Theory(Explicit = true)]
     [InlineData(RemoteDestination.Sftp)]
@@ -36,6 +36,7 @@ public sealed class NetworkDropTests
 
         var faulted = await EndFaultedRunAsync(agent, run.Id, sinceCut);
         AssertNotSucceeded(faulted);
+        AssertLostDestination(faulted, "Lost the destination: it could not be reached");
 
         remote.Proxy.Restore();
         await AssertRecoversAsync(agent, job, destination, [before], remote.StorageEnvironment);

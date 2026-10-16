@@ -16,10 +16,11 @@ internal static class HardeningSettings
     public static long ChaosSourceBytes => (long)(Number("CASHGEAR_CHAOS_SOURCE_MB", 1024) * MiB);
 
     /// <summary>
-    /// How long a chaos test lets a run that lost its destination go on before cancelling it, as a user would. Kopia
-    /// keeps going file by file for a long time (docs/hardening.md, finding 2), so waiting for its own end is impractical.
+    /// How long after the fault a run that lost its destination may take to end by itself. Kopia alone keeps going file
+    /// by file for a long time; the engine ends the run once Kopia's writes have failed for 90 s (docs/hardening.md,
+    /// finding 3). A chaos test cancels and fails a run that is still going after this.
     /// </summary>
-    public static TimeSpan ChaosFaultWait => TimeSpan.FromMinutes(Number("CASHGEAR_CHAOS_FAULT_WAIT_MIN", 3));
+    public static TimeSpan ChaosFaultWait => TimeSpan.FromMinutes(Number("CASHGEAR_CHAOS_FAULT_WAIT_MIN", 2.5));
 
     /// <summary>Files in the many-files scale scenario (the plan's full run: 1,000,000).</summary>
     public static int ScaleFileCount => (int)Number("CASHGEAR_SCALE_FILES", 20_000);

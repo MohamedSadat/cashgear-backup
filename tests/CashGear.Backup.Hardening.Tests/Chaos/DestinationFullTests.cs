@@ -32,6 +32,7 @@ public sealed class DestinationFullTests
         // Full once less than a pack (about 20 MB) of the quota is left: from then on SFTPGo refuses the writes.
         var full = await BackUpUntilFullAsync(agent, job, () => nas.UsedBytes() > quota - (32 * HardeningSettings.MiB));
         AssertNotSucceeded(full);
+        AssertLostDestination(full, "Lost the destination: it is full");
 
         await nas.RestartAsync(quotaBytes: 0, Ct);
         await AssertRecoversAsync(agent, job, destination, [before]);
@@ -64,7 +65,7 @@ public sealed class DestinationFullTests
         await AssertRecoversAsync(agent, job, destination, [before]);
     }
 
-    /// <summary>Backs up the bulk data until the destination is full, then lets the run end (or cancels it).</summary>
+    /// <summary>Backs up the bulk data until the destination is full, then waits for the run to end by itself.</summary>
     private static async Task<Run> BackUpUntilFullAsync(AgentProcess agent, Job job, Func<bool> isFull)
     {
         SourceData.WriteRandomFiles(Path.Combine(agent.Workspace.Source, "bulk"), HardeningSettings.ChaosSourceBytes);
