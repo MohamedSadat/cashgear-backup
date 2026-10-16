@@ -95,6 +95,32 @@ public class ProcessHostTests
     }
 
     [Fact]
+    public async Task A_server_whose_process_ends_is_replaced_at_once_not_at_the_next_health_check()
+    {
+        using var ws = TestWorkspace.Create(nameof(A_server_whose_process_ends_is_replaced_at_once_not_at_the_next_health_check));
+        using var log = new TestLog();
+        await using var host = ServerHarness.CreateHost(ws, log, configure: o => o with
+        {
+            HealthCheckInterval = TimeSpan.FromMinutes(10),
+            RestartBackoffInitial = TimeSpan.FromMilliseconds(200),
+        });
+        await host.StartAsync(null, Ct);
+        var first = await host.GetSessionAsync(Ct);
+        Assert.True(host.IsCurrent(first.Generation));
+
+        var process = host.CurrentProcess!.Process;
+        process.Kill();
+        await process.WaitForExitAsync(Ct);
+
+        var second = await WaitForGenerationAsync(host, first.Generation);
+        Assert.False(host.IsCurrent(first.Generation), "a dead server's generation still counts as current");
+        Assert.True(host.IsCurrent(second.Generation));
+        Assert.StartsWith("its process ended unexpectedly", host.LastRestartReason, StringComparison.Ordinal);
+        Assert.True(log.Contains("exited unexpectedly"));
+        await second.Client.GetControlStatusAsync(Ct);
+    }
+
+    [Fact]
     public async Task A_kopia_exe_swapped_while_running_is_rejected_at_restart_and_the_host_faults()
     {
         using var ws = TestWorkspace.Create(nameof(A_kopia_exe_swapped_while_running_is_rejected_at_restart_and_the_host_faults));

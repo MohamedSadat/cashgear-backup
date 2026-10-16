@@ -76,11 +76,15 @@ internal sealed partial class KopiaServerProcess : IAsyncDisposable
         _secrets = [.. secrets];
         _stdoutPump = PumpAsync(process.StandardOutput);
         _stderrPump = PumpAsync(process.StandardError);
+        Exited = process.WaitForExitAsync(CancellationToken.None);
     }
 
     public Uri BaseAddress { get; private set; } = null!;
     public int ProcessId => _process.Id;
     public bool HasExited => _disposed || _process.HasExited;
+
+    /// <summary>Completes when the process ends, for whatever reason.</summary>
+    public Task Exited { get; }
     public int? ExitCode => _disposed ? _exitCodeAfterDispose : _process.HasExited ? _process.ExitCode : null;
 
     /// <summary>Test support: the job the process was assigned to.</summary>

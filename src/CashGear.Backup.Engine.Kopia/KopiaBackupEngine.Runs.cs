@@ -201,10 +201,11 @@ public sealed partial class KopiaBackupEngine
                 await Task.Delay(_options.PollInterval, stop);
                 try
                 {
-                    var server = await session.Host.GetSessionAsync(stop);
-                    if (server.Generation != generation)
+                    // A server that died or is being replaced took Kopia's task with it.
+                    var server = session.Host.IsCurrent(generation) ? await session.Host.GetSessionAsync(stop) : null;
+                    if (server?.Generation != generation)
                     {
-                        failure = "The backup engine restarted during the run, so Kopia's task was lost.";
+                        failure = EngineStopped(session, tracker);
                         break;
                     }
 
@@ -254,6 +255,11 @@ public sealed partial class KopiaBackupEngine
 
                     errors = 0;
                 }
+                catch (Exception) when (!stop.IsCancellationRequested && !session.Host.IsCurrent(generation))
+                {
+                    // The call failed because the server died or is being replaced (its client may already be disposed).
+                    failure = EngineStopped(session, tracker);
+                }
                 catch (Exception ex) when (IsKopiaFailure(ex) && !stop.IsCancellationRequested)
                 {
                     if (++errors >= MaxConsecutivePollErrors)
@@ -282,6 +288,10 @@ public sealed partial class KopiaBackupEngine
         {
             tracker.Finish(Failed(tracker, "The engine shut down during the run."));
         }
+        catch (Exception) when (!stop.IsCancellationRequested && !session.Host.IsCurrent(generation))
+        {
+            tracker.Finish(Failed(tracker, EngineStopped(session, tracker)));
+        }
         catch (Exception ex)
         {
             LogMonitorFailed(_logger, ex, tracker.Handle.Id);
@@ -308,10 +318,10 @@ public sealed partial class KopiaBackupEngine
                 await Task.Delay(_options.PollInterval, stop);
                 try
                 {
-                    var server = await session.Host.GetSessionAsync(stop);
-                    if (server.Generation != generation)
+                    var server = session.Host.IsCurrent(generation) ? await session.Host.GetSessionAsync(stop) : null;
+                    if (server?.Generation != generation)
                     {
-                        failure = "The backup engine restarted during the restore, so Kopia's task was lost.";
+                        failure = EngineStopped(session, tracker);
                         break;
                     }
 
@@ -332,6 +342,10 @@ public sealed partial class KopiaBackupEngine
 
                     errors = 0;
                 }
+                catch (Exception) when (!stop.IsCancellationRequested && !session.Host.IsCurrent(generation))
+                {
+                    failure = EngineStopped(session, tracker);
+                }
                 catch (Exception ex) when (IsKopiaFailure(ex) && !stop.IsCancellationRequested)
                 {
                     if (++errors >= MaxConsecutivePollErrors)
@@ -348,6 +362,10 @@ public sealed partial class KopiaBackupEngine
         catch (Exception ex) when (ex is OperationCanceledException && stop.IsCancellationRequested)
         {
             tracker.Finish(Failed(tracker, "The engine shut down during the restore."));
+        }
+        catch (Exception) when (!stop.IsCancellationRequested && !session.Host.IsCurrent(generation))
+        {
+            tracker.Finish(Failed(tracker, EngineStopped(session, tracker)));
         }
         catch (Exception ex)
         {
@@ -416,6 +434,17 @@ public sealed partial class KopiaBackupEngine
         Message = message,
     };
 
+    /// <summary>The message of a run lost because its kopia server died or is being replaced (finding 2); logs it once.</summary>
+    private string EngineStopped(RepositorySession session, RunTracker tracker)
+    {
+        var reason = session.Host.LastRestartReason ?? "it was restarted";
+        LogRunLostToRestart(_logger, tracker.Handle.Id, reason);
+        return tracker.Handle.Kind == RunKind.Backup
+            ? $"The backup engine stopped during the run ({reason}); the run was lost and recorded no restore point. The engine restarts by itself and the next run starts again."
+            : $"The backup engine stopped during the restore ({reason}); the restore did not finish and the target folder may hold a partial copy. The engine restarts by itself.";
+    }
+
+
     private static async Task<DirectoryEntry> FindEntryAsync(KopiaApiClient client, string rootId, IReadOnlyList<string> segments, string path, CancellationToken ct)
     {
         var directory = await client.GetDirectoryAsync(rootId, ct);
@@ -471,4 +500,7 @@ public sealed partial class KopiaBackupEngine
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Following run {RunId} failed")]
     private static partial void LogMonitorFailed(ILogger logger, Exception exception, Guid runId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Run {RunId} was lost: the backup engine stopped during it ({Reason})")]
+    private static partial void LogRunLostToRestart(ILogger logger, Guid runId, string reason);
 }

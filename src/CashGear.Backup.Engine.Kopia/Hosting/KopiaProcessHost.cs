@@ -80,7 +80,22 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
 
     public KopiaHostState State { get; private set; } = KopiaHostState.NotStarted;
 
+    /// <summary>Why the server was last replaced ("its process ended unexpectedly", "it stopped answering"); null before any restart.</summary>
+    public string? LastRestartReason { get; private set; }
+
     public KopiaRepositoryLayout Layout => _options.Layout;
+
+    /// <summary>
+    /// Whether the server of <paramref name="generation"/> is still the one running. False as soon as it is being
+    /// replaced: whatever it was doing (a backup's task) is gone with it, and its client may already be disposed.
+    /// </summary>
+    public bool IsCurrent(int generation)
+    {
+        lock (_lock)
+        {
+            return State == KopiaHostState.Running && _current?.Generation == generation;
+        }
+    }
 
     public bool ConfigExists => File.Exists(_options.Layout.ConfigFile);
 
@@ -400,13 +415,16 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The only place that restarts the server: when its process ends (at once, since every call to it fails from then
+    /// on) or when it fails <see cref="KopiaProcessHostOptions.UnhealthyChecksBeforeRestart"/> health checks in a row.
+    /// </summary>
     private async Task HealthLoopAsync(CancellationToken stop)
     {
-        using var timer = new PeriodicTimer(_options.HealthCheckInterval);
         var failures = 0;
         try
         {
-            while (await timer.WaitForNextTickAsync(stop))
+            while (true)
             {
                 Instance? instance;
                 lock (_lock)
@@ -414,14 +432,24 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
                     instance = _current;
                 }
 
+                using (var tick = CancellationTokenSource.CreateLinkedTokenSource(stop))
+                {
+                    var interval = Task.Delay(_options.HealthCheckInterval, tick.Token);
+                    await Task.WhenAny(interval, instance?.Process.Exited ?? interval);
+                    await tick.CancelAsync();
+                }
+
+                stop.ThrowIfCancellationRequested();
                 if (instance is null)
                 {
                     continue;
                 }
 
+                string reason;
                 if (instance.Process.HasExited)
                 {
                     LogExited(_logger, _options.Name, instance.Process.ExitCode);
+                    reason = "its process ended unexpectedly";
                 }
                 else if (await IsHealthyAsync(instance, stop))
                 {
@@ -432,9 +460,13 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
                 {
                     continue;
                 }
+                else
+                {
+                    reason = "it stopped answering";
+                }
 
                 failures = 0;
-                if (!await RestartAsync(instance, stop))
+                if (!await RestartAsync(instance, reason, stop))
                 {
                     return;
                 }
@@ -463,7 +495,7 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
     }
 
     /// <summary>Replaces a dead or unresponsive server. Returns false when the host faulted and must not retry.</summary>
-    private async Task<bool> RestartAsync(Instance failed, CancellationToken stop)
+    private async Task<bool> RestartAsync(Instance failed, string reason, CancellationToken stop)
     {
         await _lifecycle.WaitAsync(stop);
         try
@@ -475,8 +507,10 @@ internal sealed partial class KopiaProcessHost : IAsyncDisposable
                     return true;
                 }
 
+                // From here IsCurrent is false for the old generation, before its client is disposed below.
                 _current = null;
                 State = KopiaHostState.Restarting;
+                LastRestartReason = reason;
                 _ready = NewReady();
             }
 
