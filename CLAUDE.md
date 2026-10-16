@@ -17,6 +17,9 @@ customer sees is .NET 10 C#.
   third-party notices and an About page, and the WiX 5.0.2 MSI (`installer/`). Before shipping: install-test the
   MSI on clean machines, and configure the licence server, update feed and signing certificate (installer
   README). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
+- **Phase 5 (beta and hardening):** the chaos and scale suites exist (`tests/CashGear.Backup.Hardening.Tests`,
+  [docs/hardening.md](docs/hardening.md): how to run them, what they found, and the scale results per release). Still
+  open: the 10-20 machine beta and the help docs.
 
 ## Architecture
 
@@ -106,6 +109,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File installer\build-installer.ps
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\notices\update-notices.ps1   # after package changes
 ```
 
+The chaos and scale suites are explicit tests: the solution run above skips them. Run them on purpose (sizes and the
+full scale run's settings are in [docs/hardening.md](docs/hardening.md); the local-disk-full test needs an elevated prompt):
+
+```powershell
+dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-trait "Category=Chaos"
+dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-trait "Category=Scale"
+```
+
 Run the agent as a console app (it does not need to be a service) with its data outside ProgramData:
 
 ```powershell
@@ -153,6 +164,7 @@ engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KE
 | `tests/CashGear.Backup.Agent.Tests` | state.db, DPAPI, schedules, pipe ACL, and the whole agent hosted in-process on a private pipe, driven through `AgentChannel` against the pinned kopia.exe |
 | `tests/CashGear.Backup.Installer.Tests` | The built MSI's tables (service, ACL, shortcut, licence key, uninstall keeps data) |
 | `tests/CashGear.Backup.Engine.Kopia.IntegrationTests` | `Contract/` one test per Kopia endpoint, `Engine/` round trips and data-safety rules through `IBackupEngine`, `Hosting/` process host, `Unit/` no-Kopia checks |
+| `tests/CashGear.Backup.Hardening.Tests` | Phase 5 suites (explicit tests): `Chaos/` agent or kopia killed, network cut (SFTP, S3), destination full, each followed by a successful run and a clean repository check; `Scale/` many small files and one big file, timed with peak memory into `artifacts\scale\results.jsonl`. `Infrastructure/` runs the agent as its own process in a Job Object, a TCP proxy that cuts the network, a quota-limited SFTP server, a VHDX volume, an independent kopia consistency check |
 | `spikes/KopiaSpike` | Phase 0 throwaway spike and its tests; lift proven code into Engine.Kopia, then delete |
 | `docs/plan/` | Plan snapshots |
 
