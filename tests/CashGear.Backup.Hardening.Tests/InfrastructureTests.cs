@@ -60,6 +60,32 @@ public sealed class InfrastructureTests
         await Assert.ThrowsAnyAsync<Exception>(() => serving);
     }
 
+    /// <summary>While up, the proxy must behave like a wire: a server closing normally is a normal close for the client, not a reset.</summary>
+    [Fact]
+    public async Task The_proxy_passes_a_normal_close_on_as_one()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        await using var proxy = new ChaosProxy(((IPEndPoint)listener.LocalEndpoint).Port);
+        using var client = await ConnectAsync(proxy.Port);
+        using (var accepted = await listener.AcceptSocketAsync(Ct))
+        {
+            await accepted.SendAsync("bye"u8.ToArray(), Ct);
+            accepted.Shutdown(SocketShutdown.Both);
+        }
+
+        var buffer = new byte[16];
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        var read = 0;
+        for (int n; (n = await client.ReceiveAsync(buffer.AsMemory(read), timeout.Token)) > 0;)
+        {
+            read += n;
+        }
+
+        Assert.Equal("bye", System.Text.Encoding.ASCII.GetString(buffer, 0, read));
+    }
+
     [Fact]
     public void The_job_lists_child_processes_and_closing_it_kills_them()
     {

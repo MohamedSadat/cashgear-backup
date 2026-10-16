@@ -108,33 +108,46 @@ internal sealed class ChaosProxy : IAsyncDisposable
             await server.ConnectAsync(new IPEndPoint(IPAddress.Loopback, TargetPort), _stopping.Token);
             if (!_up)
             {
+                link.Reset();
                 return;
             }
 
-            await Task.WhenAny(
-                PumpAsync(client, server, n => Interlocked.Add(ref _bytesToServer, n)),
-                PumpAsync(server, client, n => Interlocked.Add(ref _bytesToClient, n)));
+            await Task.WhenAll(
+                PumpAsync(client, server, link, n => Interlocked.Add(ref _bytesToServer, n)),
+                PumpAsync(server, client, link, n => Interlocked.Add(ref _bytesToClient, n)));
         }
         catch (Exception ex) when (ex is OperationCanceledException or SocketException or ObjectDisposedException)
         {
+            link.Reset();
         }
         finally
         {
             _links.TryRemove(id, out _);
-            link.Reset();
+            link.Close();
         }
     }
 
-    private async Task PumpAsync(Socket from, Socket to, Action<long> count)
+    /// <summary>
+    /// Copies one direction. A normal close (FIN) is passed on as one, so a healthy network behaves like a wire;
+    /// an error on either side resets the whole connection, as a real network would.
+    /// </summary>
+    private async Task PumpAsync(Socket from, Socket to, Link link, Action<long> count)
     {
         var buffer = new byte[64 * 1024];
         try
         {
-            while (_up)
+            while (true)
             {
                 var read = await from.ReceiveAsync(buffer, SocketFlags.None, _stopping.Token);
-                if (read == 0 || !_up)
+                if (!_up)
                 {
+                    link.Reset();
+                    return;
+                }
+
+                if (read == 0)
+                {
+                    to.Shutdown(SocketShutdown.Send);
                     return;
                 }
 
@@ -144,6 +157,7 @@ internal sealed class ChaosProxy : IAsyncDisposable
         }
         catch (Exception ex) when (ex is OperationCanceledException or SocketException or ObjectDisposedException)
         {
+            link.Reset();
         }
     }
 
@@ -162,14 +176,25 @@ internal sealed class ChaosProxy : IAsyncDisposable
 
     private sealed class Link(Socket client, Socket server)
     {
-        private int _reset;
+        private int _closed;
 
+        /// <summary>Both ends get a RST: what a dropped network looks like.</summary>
         public void Reset()
         {
-            if (Interlocked.Exchange(ref _reset, 1) == 0)
+            if (Interlocked.Exchange(ref _closed, 1) == 0)
             {
                 ResetSocket(client);
                 ResetSocket(server);
+            }
+        }
+
+        /// <summary>Both directions ended normally.</summary>
+        public void Close()
+        {
+            if (Interlocked.Exchange(ref _closed, 1) == 0)
+            {
+                client.Dispose();
+                server.Dispose();
             }
         }
     }
