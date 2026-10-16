@@ -1,0 +1,16 @@
+@inherits LayoutComponentBase
+
+<div class="app">
+    <header class="topbar">
+        <a class="brand" href="">CashGear Backup</a>
+        <nav class="topnav">
+            <NavLink href="" Match="NavLinkMatch.All">Backups</NavLink>
+            <NavLink href="jobs/new">Add a backup</NavLink>
+            <NavLink href="settings">Settings</NavLink>
+        </nav>
+    </header>
+    <AgentBanner />
+    <main class="content">
+        @Body
+    </main>
+</div>

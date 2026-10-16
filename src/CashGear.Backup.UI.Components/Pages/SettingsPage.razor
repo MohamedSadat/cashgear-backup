@@ -1,0 +1,407 @@
+@page "/settings"
+@implements IDisposable
+@inject IAgentClient Agent
+@inject AgentMonitor Monitor
+@inject IDesktopShell Shell
+@inject TimeProvider Time
+
+@* Licence, alerts, checks of backups, email, Recovery Kits, updates and support. The email password and the licence
+   key are write-only: sent when typed and never shown again. *@
+
+<div class="page-head">
+    <h1>Settings</h1>
+</div>
+
+<ErrorBox Message="@_loadError" />
+
+@if (_licence is not null)
+{
+    <section id="licence" class="wizard-step">
+        <h2>Licence</h2>
+        <p id="licence-summary"><strong>@LicenceText.Edition(_licence)</strong>: @LicenceText.State(_licence)</p>
+        @if (!string.IsNullOrEmpty(_licence.Message))
+        {
+            <p id="licence-message" class="hint">@_licence.Message</p>
+        }
+        @if (_licence.Edition == Edition.Free)
+        {
+            <p class="hint">The Free edition backs up one folder to a disk or a network share. Pro adds more folders, SFTP and cloud storage, and email alerts.</p>
+        }
+        <div class="field inline">
+            <label for="licence-key">Licence key</label>
+            <input id="licence-key" type="text" autocomplete="off" spellcheck="false" value="@_licenceKey"
+                   @onchange="e => _licenceKey = e.Value?.ToString() ?? string.Empty" />
+            <button type="button" id="activate-licence" class="button" @onclick="ActivateAsync" disabled="@_busy">Activate</button>
+        </div>
+        @if (_licence.Edition != Edition.Free && !string.IsNullOrEmpty(_licence.KeyHint))
+        {
+            @if (_confirmRemove)
+            {
+                <div class="actions">
+                    <span class="hint">This PC goes back to the Free edition: only the first backup keeps running. Your backups stay where they are.</span>
+                    <button type="button" id="remove-licence-confirm" class="button danger" @onclick="RemoveLicenceAsync" disabled="@_busy">Remove the licence</button>
+                    <button type="button" id="remove-licence-cancel" class="button" @onclick="() => _confirmRemove = false">Keep it</button>
+                </div>
+            }
+            else
+            {
+                <div class="actions">
+                    <button type="button" id="remove-licence" class="button" @onclick="() => _confirmRemove = true">Remove the licence from this PC…</button>
+                </div>
+            }
+        }
+        <ErrorBox Message="@_licenceError" />
+    </section>
+}
+
+@if (_settings is not null)
+{
+    <section class="wizard-step">
+        <h2>Alerts and checks</h2>
+        <div class="keep-grid">
+            <label for="alert-days">Warn when a backup has not run for (days)</label>
+            <input id="alert-days" type="number" min="1" max="60" @bind="_settings.AlertAfterDays" />
+            <label for="verify-days">Check each backup every (days; 0 for never)</label>
+            <input id="verify-days" type="number" min="0" max="90" @bind="_settings.VerifyEveryDays" />
+            <label for="verify-percent">Files read back in each check (percent)</label>
+            <input id="verify-percent" type="number" min="0" max="100" step="1" @bind="_settings.VerifySamplePercent" />
+        </div>
+        <p class="hint">A check reads the backups back from where they are kept, to find damage before you need them. Reading more files takes longer.</p>
+    </section>
+
+    <section class="wizard-step">
+        <h2>Email</h2>
+        <label class="choice">
+            <input type="checkbox" id="email-enabled" @bind="_settings.Email.Enabled" disabled="@(!EmailAllowed && !_settings.Email.Enabled)" />
+            Email me when a backup fails, a check finds a problem, or there has been no backup for too long
+        </label>
+        @if (!EmailAllowed)
+        {
+            <p id="email-needs-pro" class="hint">Email alerts need a Pro licence.</p>
+        }
+        <div class="field">
+            <label for="smtp-host">Mail server</label>
+            <input id="smtp-host" type="text" placeholder="smtp.example.com" @bind="_settings.Email.SmtpHost" />
+        </div>
+        <div class="field inline">
+            <label for="smtp-security">Encryption</label>
+            <select id="smtp-security" @bind="_settings.Email.Security">
+                <option value="@SmtpSecurity.Starttls">STARTTLS (usually port 587)</option>
+                <option value="@SmtpSecurity.Tls">TLS (usually port 465)</option>
+                <option value="@SmtpSecurity.None">None (local relay only, no login)</option>
+            </select>
+            <label for="smtp-port">Port (0: the usual one)</label>
+            <input id="smtp-port" type="number" min="0" max="65535" placeholder="usual" @bind="_settings.Email.SmtpPort" />
+        </div>
+        <div class="field">
+            <label for="smtp-username">Username</label>
+            <input id="smtp-username" type="text" autocomplete="off" @bind="_settings.Email.Username" />
+        </div>
+        <div class="field">
+            <label for="smtp-password">Password</label>
+            <input id="smtp-password" type="password" autocomplete="new-password" value="@_password"
+                   placeholder="@(_settings.Email.PasswordSaved ? "Saved (leave empty to keep it)" : "")"
+                   @onchange="e => _password = e.Value?.ToString() ?? string.Empty" />
+            @if (_settings.Email.PasswordSaved)
+            {
+                <label class="choice">
+                    <input type="checkbox" id="smtp-clear-password" checked="@_clearPassword" @onchange="e => _clearPassword = e.Value is true" />
+                    Forget the saved password
+                </label>
+            }
+        </div>
+        <div class="field">
+            <label for="mail-from">From</label>
+            <input id="mail-from" type="text" placeholder="backup@example.com" @bind="_settings.Email.FromAddress" />
+        </div>
+        <div class="field">
+            <label for="mail-to">To (separate several with commas)</label>
+            <input id="mail-to" type="text" placeholder="you@example.com" @bind="_settings.Email.ToAddresses" />
+        </div>
+        <div class="actions">
+            <button type="button" id="send-test" class="button" @onclick="SendTestAsync" disabled="@_busy">Send a test email</button>
+            @if (_testResult is not null)
+            {
+                <span id="test-result" class="hint">@_testResult</span>
+            }
+        </div>
+    </section>
+
+    <ElevationNote />
+    <ErrorBox Message="@_error" />
+    <div class="wizard-nav">
+        @if (_savedMessage is not null)
+        {
+            <span id="settings-saved" class="hint">@_savedMessage</span>
+        }
+        <button type="button" id="save-settings" class="button primary" @onclick="SaveAsync" disabled="@_busy">Save settings</button>
+    </div>
+
+    <section class="wizard-step">
+        <h2>Recovery Kits</h2>
+        <p>
+            One printable page per backup destination with where the backups are and how to get them back on another PC.
+            The password is not on it: write it on the page by hand.
+        </p>
+        @if (_destinations.Count == 0)
+        {
+            <p class="muted">No backup destinations yet.</p>
+        }
+        @foreach (var destination in _destinations)
+        {
+            <div class="kit-row">
+                <span><strong>@destination.Name</strong> <span class="path">@destination.Location</span></span>
+                <button type="button" class="button recovery-kit" @onclick="() => SaveKitAsync(destination)">Save Recovery Kit…</button>
+                @if (_kitSaved.GetValueOrDefault(destination.Id) is { } path)
+                {
+                    <span class="hint">Saved to @path</span>
+                }
+            </div>
+        }
+    </section>
+}
+
+@if (_update is not null)
+{
+    <section id="updates" class="wizard-step">
+        <h2>Updates</h2>
+        <p id="update-status">@UpdateText.For(_update, Time)</p>
+        @if (_update.State != UpdateState.NotConfigured)
+        {
+            <div class="actions">
+                <button type="button" id="check-updates" class="button" @onclick="CheckForUpdatesAsync" disabled="@_busy">Check for updates</button>
+            </div>
+        }
+        <ErrorBox Message="@_updateError" />
+    </section>
+}
+
+<section id="support" class="wizard-step">
+    <h2>Help and support</h2>
+    <p>
+        A support file holds the backup service's recent logs and settings, without passwords or keys. Save one and send it
+        to support when they ask for it.
+    </p>
+    <div class="actions">
+        <button type="button" id="support-bundle" class="button" @onclick="SaveSupportBundleAsync" disabled="@_busy">Save a support file…</button>
+        @if (_bundleSaved is not null)
+        {
+            <span id="support-bundle-saved" class="hint">Saved to @_bundleSaved</span>
+        }
+    </div>
+    <ErrorBox Message="@_supportError" />
+    <p><a id="about-link" href="about">About CashGear Backup and open-source notices</a></p>
+</section>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Dictionary<string, string> _kitSaved = [];
+    private Settings? _settings;
+    private LicenceStatus? _licence;
+    private UpdateStatus? _update;
+    private IReadOnlyList<Destination> _destinations = [];
+    private string _licenceKey = "";
+    private bool _confirmRemove;
+    private string? _licenceError;
+    private string? _updateError;
+    private string? _supportError;
+    private string? _bundleSaved;
+    private string _password = "";
+    private bool _clearPassword;
+    private string? _loadError;
+    private string? _error;
+    private string? _savedMessage;
+    private string? _testResult;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _settings = await Agent.GetSettingsAsync(_cts.Token);
+            _settings.Email ??= new EmailSettings();
+            _destinations = await Agent.ListDestinationsAsync(_cts.Token);
+            _licence = await Agent.GetLicenceAsync(_cts.Token);
+            _update = await Agent.GetUpdateStatusAsync(_cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _loadError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        _savedMessage = null;
+        try
+        {
+            var changes = _settings!.Clone();
+            changes.Email.Password = _password;
+            changes.Email.ClearPassword = _clearPassword;
+            _settings = await Agent.UpdateSettingsAsync(changes, _cts.Token);
+            _savedMessage = "Saved.";
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            // The password is not kept on the page, whether or not the agent took it.
+            _password = "";
+            _clearPassword = false;
+            _busy = false;
+        }
+    }
+
+    /// <summary>Unknown counts as allowed: the agent checks again anyway.</summary>
+    private bool EmailAllowed => _licence?.EmailAlerts ?? true;
+
+    private async Task ActivateAsync()
+    {
+        _licenceError = null;
+        if (string.IsNullOrWhiteSpace(_licenceKey))
+        {
+            _licenceError = "Enter the licence key from your purchase email.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _licence = await Agent.ActivateLicenceAsync(_licenceKey.Trim(), _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _licenceError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            // The key is not kept on the page, whether or not it was accepted.
+            _licenceKey = "";
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveLicenceAsync()
+    {
+        _busy = true;
+        _licenceError = null;
+        try
+        {
+            _licence = await Agent.RemoveLicenceAsync(_cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _licenceError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _confirmRemove = false;
+            _busy = false;
+        }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        _busy = true;
+        _updateError = null;
+        try
+        {
+            _update = await Agent.CheckForUpdatesAsync(_cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _updateError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveSupportBundleAsync()
+    {
+        _busy = true;
+        _supportError = null;
+        _bundleSaved = null;
+        try
+        {
+            var bundle = await Agent.CreateSupportBundleAsync(_cts.Token);
+            _bundleSaved = await Shell.SaveFileAsync(bundle.FileName, bundle.Content.ToByteArray(), _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _supportError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SendTestAsync()
+    {
+        _busy = true;
+        _error = null;
+        _testResult = null;
+        try
+        {
+            var email = _settings!.Email.Clone();
+            email.Password = _password;
+            await Agent.SendTestEmailAsync(email, _cts.Token);
+            _testResult = $"A test email was sent to {email.ToAddresses}.";
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveKitAsync(Destination destination)
+    {
+        _error = null;
+        var kit = RecoveryKit.Create(new RecoveryKitInfo(destination.Name, destination.Location, Environment.MachineName,
+            Monitor.Status?.MachineIdentity ?? "", Time.GetLocalNow()));
+        var saved = await Shell.SaveFileAsync(RecoveryKit.FileName(destination.Name), kit, _cts.Token);
+        if (saved is not null)
+        {
+            _kitSaved[destination.Id] = saved;
+        }
+    }
+
+    public void Dispose()
+    {
+        _password = "";
+        _licenceKey = "";
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

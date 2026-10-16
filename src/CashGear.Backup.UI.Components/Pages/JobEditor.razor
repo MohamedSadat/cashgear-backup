@@ -1,0 +1,760 @@
+@page "/jobs/new"
+@page "/jobs/{JobId}/edit"
+@implements IDisposable
+@inject IAgentClient Agent
+@inject NavigationManager Navigation
+@inject AgentMonitor Monitor
+@inject IDesktopShell Shell
+@inject TimeProvider Time
+@inject CashGear.Backup.Client.Security.ISftpHostKeyProbe HostKeyProbe
+
+@* The job wizard: what, where, when, how long, review. Editing skips "where": a job's folder and destination are fixed. *@
+
+<div class="page-head">
+    <h1>@Heading</h1>
+</div>
+
+@if (_loadError is not null)
+{
+    <ErrorBox Message="@_loadError" />
+    <a class="button" href="">Back to backups</a>
+}
+else if (_draft is null)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_jobLimitReached)
+{
+    <section id="free-limit" class="wizard-step">
+        <h2>The Free edition backs up one folder</h2>
+        <p>To back up more folders, activate a Pro licence in <a href="settings">Settings</a>. Your existing backup keeps running.</p>
+        <a class="button" href="">Back to backups</a>
+    </section>
+}
+else if (_newDestination is not null && _jobCreated)
+{
+    <section id="recovery-kit-panel" class="wizard-step">
+        <h2>Your backup is set up</h2>
+        <p>
+            Save your Recovery Kit now: one page with where your backups are and how to get them back on another PC.
+            Print it, or keep it on a USB stick, away from this computer.
+        </p>
+        <label class="choice">
+            <input type="checkbox" id="kit-include-password" checked="@_kitIncludePassword" @onchange="e => _kitIncludePassword = e.Value is true" />
+            Put the password on the page too (anyone who finds the page can then open your backups)
+        </label>
+        <div class="actions">
+            <button type="button" id="save-kit" class="button primary" @onclick="SaveKitAsync">Save Recovery Kit…</button>
+            <button type="button" id="done" class="button" @onclick="Done">Done</button>
+        </div>
+        @if (_kitSaved is not null)
+        {
+            <p id="kit-saved" class="hint">Saved to @_kitSaved.</p>
+        }
+    </section>
+}
+else
+{
+    <ol class="steps">
+        @foreach (var step in _draft.Steps)
+        {
+            <li class="@StepClass(step)">@StepTitle(step)</li>
+        }
+    </ol>
+
+    <section class="wizard-step">
+        @switch (_step)
+        {
+            case WizardStep.What:
+                <h2>What to back up</h2>
+                <div class="field">
+                    <label for="job-name">Name</label>
+                    <input id="job-name" type="text" maxlength="200" placeholder="Documents" @bind="_draft.Name" />
+                </div>
+                <div class="field">
+                    <label for="source">Folder</label>
+                    <FolderField Id="source" Title="Choose the folder to back up" Value="@_draft.SourcePath" ValueChanged="OnSourceChanged" Disabled="_draft.IsEdit" />
+                    @if (_draft.IsEdit)
+                    {
+                        <p class="hint">A backup's folder cannot change. To back up another folder, add a new backup.</p>
+                    }
+                </div>
+                <div class="field">
+                    <label for="excludes">Leave out (optional)</label>
+                    <textarea id="excludes" rows="4" spellcheck="false" placeholder="*.tmp&#10;node_modules/" @bind="_draft.ExcludesText"></textarea>
+                    <p class="hint">One pattern per line, relative to the folder: <code>*.tmp</code> leaves out every .tmp file, <code>Downloads/</code> a subfolder.</p>
+                </div>
+                break;
+
+            case WizardStep.Where:
+                <h2>Where to keep the backups</h2>
+                <fieldset class="choices">
+                    <legend class="sr-only">Destination</legend>
+                    @if (_destinations.Count > 0)
+                    {
+                        <label class="choice">
+                            <input type="radio" id="dest-existing" name="destination-choice" checked="@(_draft.DestinationChoice == DestinationChoice.Existing)" @onchange="() => Choose(DestinationChoice.Existing)" />
+                            A destination you already use
+                        </label>
+                    }
+                    <label class="choice">
+                        <input type="radio" id="dest-create" name="destination-choice" checked="@(_draft.DestinationChoice == DestinationChoice.CreateNew)" @onchange="() => Choose(DestinationChoice.CreateNew)" />
+                        Create a new backup destination
+                    </label>
+                    <label class="choice">
+                        <input type="radio" id="dest-connect" name="destination-choice" checked="@(_draft.DestinationChoice == DestinationChoice.ConnectExisting)" @onchange="() => Choose(DestinationChoice.ConnectExisting)" />
+                        Use a backup made earlier (after reinstalling, or from another PC)
+                    </label>
+                </fieldset>
+
+                @if (_draft.DestinationChoice == DestinationChoice.Existing)
+                {
+                    <div class="field">
+                        <label for="destination">Destination</label>
+                        <select id="destination" @bind="_draft.DestinationId">
+                            @foreach (var destination in _destinations)
+                            {
+                                <option value="@destination.Id">@destination.Name — @destination.Location@(destination.State == DestinationState.Unavailable ? " (not reachable now)" : "")</option>
+                            }
+                        </select>
+                    </div>
+                }
+                else
+                {
+                    <div class="field">
+                        <label for="destination-name">Name</label>
+                        <input id="destination-name" type="text" maxlength="200" placeholder="Backup disk" @bind="_draft.DestinationName" />
+                    </div>
+                    <fieldset class="choices">
+                        <legend>What kind of place</legend>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-folder" name="destination-type" checked="@(_draft.DestinationType == DestinationType.Folder)" @onchange="() => _draft.DestinationType = DestinationType.Folder" />
+                            A folder on this PC, another disk or a USB drive
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-share" name="destination-type" checked="@(_draft.DestinationType == DestinationType.NetworkShare)" @onchange="() => _draft.DestinationType = DestinationType.NetworkShare" />
+                            A network share (NAS) with its own account
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-sftp" name="destination-type" disabled="@(!CloudAllowed)" checked="@(_draft.DestinationType == DestinationType.Sftp)" @onchange="() => _draft.DestinationType = DestinationType.Sftp" />
+                            An SFTP server
+                        </label>
+                        <label class="choice">
+                            <input type="radio" id="dest-type-s3" name="destination-type" disabled="@(!CloudAllowed)" checked="@(_draft.DestinationType == DestinationType.S3)" @onchange="() => _draft.DestinationType = DestinationType.S3" />
+                            S3-compatible cloud storage (Amazon S3, Backblaze B2, Wasabi and others)
+                        </label>
+                        @if (!CloudAllowed)
+                        {
+                            <p id="cloud-needs-pro" class="hint">SFTP and cloud storage need a Pro licence (<a href="settings">Settings</a>).</p>
+                        }
+                    </fieldset>
+                    @switch (_draft.DestinationType)
+                    {
+                        case DestinationType.Folder:
+                            <div class="field">
+                                <label for="destination-location">Folder</label>
+                                <FolderField Id="destination-location" Title="Choose where to keep the backups" Value="@_draft.DestinationLocation" ValueChanged="OnLocationChanged" />
+                                <p class="hint">A folder on another disk or a USB drive. The backup service must be able to reach it.</p>
+                            </div>
+                            break;
+                        case DestinationType.NetworkShare:
+                            <div class="field">
+                                <label for="destination-location">Share and folder</label>
+                                <FolderField Id="destination-location" Title="Choose the folder on the network share" Placeholder="\\server\share\folder" Value="@_draft.DestinationLocation" ValueChanged="OnLocationChanged" />
+                            </div>
+                            <div class="field">
+                                <label for="share-username">Account on the share</label>
+                                <input id="share-username" type="text" autocomplete="off" placeholder="NAS\backup" @bind="_draft.ShareUsername" />
+                            </div>
+                            <div class="field">
+                                <label for="share-password">Its password</label>
+                                <input id="share-password" type="password" autocomplete="new-password" @bind="_draft.SharePassword" />
+                                <p class="hint">The backup service connects to the share with this account; your own mapped drives and saved passwords are not used.</p>
+                            </div>
+                            break;
+                        case DestinationType.Sftp:
+                            <div class="field inline">
+                                <label for="sftp-host">Server</label>
+                                <input id="sftp-host" type="text" placeholder="nas.local" @bind="_draft.SftpHost" />
+                                <label for="sftp-port">Port</label>
+                                <input id="sftp-port" type="number" min="1" max="65535" @bind="_draft.SftpPort" />
+                            </div>
+                            <div class="field">
+                                <label for="sftp-username">Username</label>
+                                <input id="sftp-username" type="text" autocomplete="off" @bind="_draft.SftpUsername" />
+                            </div>
+                            <fieldset class="choices">
+                                <legend class="sr-only">Sign-in</legend>
+                                <label class="choice">
+                                    <input type="radio" id="sftp-auth-password" name="sftp-auth" checked="@(!_draft.SftpUseKey)" @onchange="() => _draft.SftpUseKey = false" />
+                                    Password
+                                </label>
+                                <label class="choice">
+                                    <input type="radio" id="sftp-auth-key" name="sftp-auth" checked="@_draft.SftpUseKey" @onchange="() => _draft.SftpUseKey = true" />
+                                    Private key
+                                </label>
+                            </fieldset>
+                            @if (_draft.SftpUseKey)
+                            {
+                                <div class="field">
+                                    <label for="sftp-key">Private key (paste the key file's text)</label>
+                                    <textarea id="sftp-key" rows="5" spellcheck="false" @bind="_draft.SftpPrivateKey"></textarea>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="field">
+                                    <label for="sftp-password">SFTP password</label>
+                                    <input id="sftp-password" type="password" autocomplete="new-password" @bind="_draft.SftpPassword" />
+                                </div>
+                            }
+                            <div class="field">
+                                <label for="sftp-path">Folder on the server</label>
+                                <input id="sftp-path" type="text" placeholder="/backups/my-pc" @bind="_draft.SftpPath" />
+                            </div>
+                            <div class="actions">
+                                <button type="button" id="sftp-check" class="button" @onclick="CheckServerAsync" disabled="@(_checkingServer || _draft.SftpHost.Trim().Length == 0)">Check the server</button>
+                            </div>
+                            <ErrorBox Message="@_probeError" />
+                            @if (_draft.SftpHostKeys.Count > 0)
+                            {
+                                <div class="host-keys">
+                                    <p>The server identifies itself with these fingerprints:</p>
+                                    <ul>
+                                        @foreach (var key in _draft.SftpHostKeys)
+                                        {
+                                            <li><span class="muted">@key.KeyType</span> <span class="path">@key.Fingerprint</span></li>
+                                        }
+                                    </ul>
+                                    <label class="choice">
+                                        <input type="checkbox" id="sftp-trust" checked="@_draft.SftpHostKeysConfirmed" @onchange="e => _draft.SftpHostKeysConfirmed = e.Value is true" />
+                                        These match the server (ask whoever runs it, or look in its settings)
+                                    </label>
+                                </div>
+                            }
+                            break;
+                        case DestinationType.S3:
+                            <div class="field">
+                                <label for="s3-endpoint">Endpoint</label>
+                                <input id="s3-endpoint" type="text" placeholder="s3.amazonaws.com" @bind="_draft.S3Endpoint" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-region">Region (if the service needs one)</label>
+                                <input id="s3-region" type="text" placeholder="eu-central-1" @bind="_draft.S3Region" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-bucket">Bucket</label>
+                                <input id="s3-bucket" type="text" @bind="_draft.S3Bucket" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-prefix">Folder in the bucket (optional)</label>
+                                <input id="s3-prefix" type="text" placeholder="my-pc/" @bind="_draft.S3Prefix" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-access-key">Access key ID</label>
+                                <input id="s3-access-key" type="text" autocomplete="off" @bind="_draft.S3AccessKeyId" />
+                            </div>
+                            <div class="field">
+                                <label for="s3-secret">Secret access key</label>
+                                <input id="s3-secret" type="password" autocomplete="new-password" @bind="_draft.S3SecretKey" />
+                            </div>
+                            <label class="choice">
+                                <input type="checkbox" id="s3-https" @bind="_draft.S3UseHttps" />
+                                Use HTTPS (untick only for a service on your own network without HTTPS)
+                            </label>
+                            break;
+                    }
+                    @if (_draft.DestinationChoice == DestinationChoice.CreateNew)
+                    {
+                        <p id="password-warning" class="warning">
+                            Your backups are encrypted with this password. Write it down and keep it somewhere safe:
+                            it cannot be recovered. Without it, nobody (not even CashGear) can restore your files.
+                        </p>
+                        <div class="field">
+                            <label for="password">Password (at least @JobDraft.MinimumPasswordLength characters)</label>
+                            <input id="password" type="password" autocomplete="new-password" @bind="_draft.Password" />
+                        </div>
+                        <div class="field">
+                            <label for="password-confirmation">Type the password again</label>
+                            <input id="password-confirmation" type="password" autocomplete="new-password" @bind="_draft.PasswordConfirmation" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="field">
+                            <label for="password">Password of that backup</label>
+                            <input id="password" type="password" autocomplete="current-password" @bind="_draft.Password" />
+                        </div>
+                    }
+                }
+                break;
+
+            case WizardStep.When:
+                <h2>When to back up</h2>
+                <fieldset class="choices">
+                    <legend class="sr-only">Schedule</legend>
+                    <label class="choice">
+                        <input type="radio" id="schedule-daily" name="schedule" checked="@(_draft.ScheduleChoice == ScheduleChoice.Daily)" @onchange="() => _draft.ScheduleChoice = ScheduleChoice.Daily" />
+                        Every day, or on the days I choose
+                    </label>
+                    <label class="choice">
+                        <input type="radio" id="schedule-interval" name="schedule" checked="@(_draft.ScheduleChoice == ScheduleChoice.Interval)" @onchange="() => _draft.ScheduleChoice = ScheduleChoice.Interval" />
+                        Every few hours
+                    </label>
+                    <label class="choice">
+                        <input type="radio" id="schedule-manual" name="schedule" checked="@(_draft.ScheduleChoice == ScheduleChoice.Manual)" @onchange="() => _draft.ScheduleChoice = ScheduleChoice.Manual" />
+                        Only when I click Back up now
+                    </label>
+                </fieldset>
+                @if (_draft.ScheduleChoice == ScheduleChoice.Daily)
+                {
+                    <div class="field inline">
+                        <label for="daily-time">At</label>
+                        @* Not @bind: for type="time" Razor binds only DateTime/TimeOnly; the draft keeps "HH:mm" text. *@
+                        <input id="daily-time" type="time" value="@_draft.DailyTime" @onchange="e => _draft.DailyTime = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                    <div class="days">
+                        @foreach (var day in JobDraft.AllDays)
+                        {
+                            <label class="day">
+                                <input type="checkbox" id="day-@((int)day)" checked="@_draft.DailyDays.Contains(day)" @onchange="e => ToggleDay(day, e)" />
+                                @day.ToString()[..3]
+                            </label>
+                        }
+                    </div>
+                    <p class="hint">If the PC is off or asleep then, the backup runs once as soon as it is back.</p>
+                }
+                else if (_draft.ScheduleChoice == ScheduleChoice.Interval)
+                {
+                    <div class="field inline">
+                        <label for="interval-hours">Every</label>
+                        <input id="interval-hours" type="number" min="1" max="24" @bind="_draft.IntervalHours" />
+                        <span>hours</span>
+                    </div>
+                }
+                break;
+
+            case WizardStep.HowLong:
+                <h2>How long to keep backups</h2>
+                <p>A backup is kept when any of these rules keeps it. After each backup, the ones no rule keeps are removed.</p>
+                @if (_draft.IsEdit)
+                {
+                    <p class="warning">Lowering these numbers removes older backups after the next backup.</p>
+                }
+                <div class="keep-grid">
+                    <label for="keep-latest">Most recent</label>
+                    <input id="keep-latest" type="number" min="1" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepLatest" />
+                    <label for="keep-hourly">One per hour, for the last</label>
+                    <input id="keep-hourly" type="number" min="0" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepHourly" />
+                    <label for="keep-daily">One per day, for the last</label>
+                    <input id="keep-daily" type="number" min="0" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepDaily" />
+                    <label for="keep-weekly">One per week, for the last</label>
+                    <input id="keep-weekly" type="number" min="0" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepWeekly" />
+                    <label for="keep-monthly">One per month, for the last</label>
+                    <input id="keep-monthly" type="number" min="0" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepMonthly" />
+                    <label for="keep-annual">One per year, for the last</label>
+                    <input id="keep-annual" type="number" min="0" max="@JobDraft.MaxKeepCount" @bind="_draft.KeepAnnual" />
+                </div>
+                <div class="field">
+                    <label for="compression">Compression</label>
+                    <select id="compression" @bind="_draft.Compression">
+                        <option value="@Compression.Balanced">Balanced (recommended)</option>
+                        <option value="@Compression.Fastest">Fastest</option>
+                        <option value="@Compression.Smallest">Smallest</option>
+                        <option value="@Compression.Off">Off</option>
+                    </select>
+                </div>
+                break;
+
+            default:
+                <h2>@(_draft.IsEdit ? "Check and save" : "Check and create")</h2>
+                <dl class="summary">
+                    <dt>Name</dt>
+                    <dd>@_draft.Name</dd>
+                    <dt>Folder</dt>
+                    <dd>@_draft.SourcePath</dd>
+                    @if (_draft.Excludes.Count > 0)
+                    {
+                        <dt>Leave out</dt>
+                        <dd>@string.Join(", ", _draft.Excludes)</dd>
+                    }
+                    <dt>Destination</dt>
+                    <dd>@DestinationSummary</dd>
+                    <dt>When</dt>
+                    <dd>@Format.Schedule(_draft.ToSchedule())</dd>
+                    <dt>Keep</dt>
+                    <dd>@RetentionSummary</dd>
+                    <dt>Compression</dt>
+                    <dd>@Format.Compression(_draft.Compression)</dd>
+                </dl>
+                @if (_draft.IsEdit)
+                {
+                    <label class="choice">
+                        <input type="checkbox" id="enabled" @bind="_draft.Enabled" />
+                        Back up on schedule (untick to pause this backup)
+                    </label>
+                }
+                <ElevationNote />
+                @if (_draft.IsEdit)
+                {
+                    <section class="danger-zone">
+                        @if (!_confirmDelete)
+                        {
+                            <button type="button" id="delete" class="button danger" @onclick="() => _confirmDelete = true" disabled="@_busy">Delete this backup job…</button>
+                        }
+                        else
+                        {
+                            <div id="delete-confirmation" class="warning">
+                                <p>
+                                    Delete "@_draft.Name"? It will not run again. Its backups stay on @DestinationSummary:
+                                    to restore from them later, add a backup of the same folder to the same destination.
+                                </p>
+                                <button type="button" id="confirm-delete" class="button danger" @onclick="DeleteAsync" disabled="@_busy">Delete job</button>
+                                <button type="button" class="button" @onclick="() => _confirmDelete = false">Keep it</button>
+                            </div>
+                        }
+                    </section>
+                }
+                break;
+        }
+    </section>
+
+    @if (_stepErrors.Count > 0)
+    {
+        <ul id="step-errors" class="errors" role="alert">
+            @foreach (var error in _stepErrors)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    }
+    <ErrorBox Message="@_saveError" />
+
+    <nav class="wizard-nav">
+        <a class="button" href="">Cancel</a>
+        @if (_step != _draft.Steps[0])
+        {
+            <button type="button" id="back" class="button" @onclick="Back" disabled="@_busy">Back</button>
+        }
+        @if (_step != WizardStep.Review)
+        {
+            <button type="button" id="next" class="button primary" @onclick="Next">Next</button>
+        }
+        else
+        {
+            <button type="button" id="save" class="button primary" @onclick="SaveAsync" disabled="@_busy">@(_draft.IsEdit ? "Save changes" : "Create backup")</button>
+        }
+    </nav>
+}
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private List<Destination> _destinations = [];
+    private JobDraft? _draft;
+    private WizardStep _step = WizardStep.What;
+    private List<string> _stepErrors = [];
+    private string? _loadError;
+    private string? _saveError;
+    private bool _busy;
+    private bool _confirmDelete;
+
+    // A destination this wizard created: offered as a Recovery Kit once the job exists. Its password stays in
+    // memory only until the kit page is left.
+    private Destination? _newDestination;
+    private string? _kitPassword;
+    private bool _jobCreated;
+    private bool _kitIncludePassword;
+    private string? _kitSaved;
+    private bool _checkingServer;
+    private string? _probeError;
+    private LicenceStatus? _licence;
+    private bool _jobLimitReached;
+
+    /// <summary>Unknown (the agent did not say) counts as allowed: the agent checks again anyway.</summary>
+    private bool CloudAllowed => _licence?.CloudDestinations ?? true;
+
+    /// <summary>Set when changing an existing job.</summary>
+    [Parameter]
+    public string? JobId { get; set; }
+
+    private string Heading => _draft is { IsEdit: true } ? $"Change {_draft.Name}" : JobId is null ? "Add a backup" : "Change backup";
+
+    private string DestinationSummary =>
+        _draft is null ? ""
+        : _draft.DestinationChoice == DestinationChoice.Existing
+            ? _destinations.FirstOrDefault(d => d.Id == _draft.DestinationId) is { } d ? $"{d.Name} ({d.Location})" : "the destination"
+            : $"{_draft.DestinationName} ({_draft.DestinationDisplay}), {(_draft.DestinationChoice == DestinationChoice.CreateNew ? "new" : "made earlier")}";
+
+    private string RetentionSummary
+    {
+        get
+        {
+            var d = _draft!;
+            var parts = new List<string> { $"the {d.KeepLatest} most recent" };
+            void Add(int count, string unit)
+            {
+                if (count > 0)
+                {
+                    parts.Add($"one per {unit} for {count} {unit}{(count == 1 ? "" : "s")}");
+                }
+            }
+
+            Add(d.KeepHourly, "hour");
+            Add(d.KeepDaily, "day");
+            Add(d.KeepWeekly, "week");
+            Add(d.KeepMonthly, "month");
+            Add(d.KeepAnnual, "year");
+            return string.Join(", ", parts);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _destinations = [.. await Agent.ListDestinationsAsync(_cts.Token)];
+            _licence = await Agent.GetLicenceAsync(_cts.Token);
+            if (JobId is null)
+            {
+                _jobLimitReached = _licence.MaxJobs > 0 && (await Agent.ListJobsAsync(_cts.Token)).Count >= _licence.MaxJobs;
+                _draft = JobDraft.ForNew(_destinations);
+                return;
+            }
+
+            var job = (await Agent.ListJobsAsync(_cts.Token)).FirstOrDefault(j => j.Id == JobId);
+            if (job is null)
+            {
+                _loadError = "This backup job no longer exists.";
+                return;
+            }
+
+            _draft = JobDraft.FromJob(job);
+        }
+        catch (AgentCallException ex)
+        {
+            _loadError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static string StepTitle(WizardStep step) => step switch
+    {
+        WizardStep.What => "What",
+        WizardStep.Where => "Where",
+        WizardStep.When => "When",
+        WizardStep.HowLong => "How long",
+        _ => "Review",
+    };
+
+    private string StepClass(WizardStep step)
+    {
+        var steps = _draft!.Steps.ToList();
+        var index = steps.IndexOf(step);
+        var current = steps.IndexOf(_step);
+        return index == current ? "current" : index < current ? "done" : "";
+    }
+
+    private void OnSourceChanged(string value)
+    {
+        _draft!.SourcePath = value;
+        if (string.IsNullOrWhiteSpace(_draft.Name))
+        {
+            _draft.Name = Path.GetFileName(Path.TrimEndingDirectorySeparator(value.Trim()));
+        }
+    }
+
+    private void OnLocationChanged(string value)
+    {
+        _draft!.DestinationLocation = value;
+        if (string.IsNullOrWhiteSpace(_draft.DestinationName))
+        {
+            var trimmed = Path.TrimEndingDirectorySeparator(value.Trim());
+            _draft.DestinationName = Path.GetFileName(trimmed) is { Length: > 0 } name ? name : trimmed;
+        }
+    }
+
+    private void Choose(DestinationChoice choice)
+    {
+        _draft!.DestinationChoice = choice;
+        _draft.ForgetPasswords();
+        if (choice == DestinationChoice.Existing && string.IsNullOrEmpty(_draft.DestinationId) && _destinations.Count > 0)
+        {
+            _draft.DestinationId = _destinations[0].Id;
+        }
+    }
+
+    /// <summary>Reads the SFTP server's host keys (as the user, before anything is sent) for the user to confirm.</summary>
+    private async Task CheckServerAsync()
+    {
+        _probeError = null;
+        _checkingServer = true;
+        try
+        {
+            _draft!.SetHostKeys(await HostKeyProbe.ProbeAsync(_draft.SftpHost.Trim(), _draft.SftpPort, _cts.Token));
+        }
+        catch (IOException ex)
+        {
+            _probeError = $"The server did not answer: {ex.Message}";
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _checkingServer = false;
+        }
+    }
+
+    private void ToggleDay(DayOfWeek day, ChangeEventArgs e)
+    {
+        var on = e.Value is true || (e.Value is string text && bool.TryParse(text, out var parsed) && parsed);
+        if (on)
+        {
+            _draft!.DailyDays.Add(day);
+        }
+        else
+        {
+            _draft!.DailyDays.Remove(day);
+        }
+    }
+
+    private void Next()
+    {
+        _saveError = null;
+        _stepErrors = [.. _draft!.Validate(_step)];
+        if (_stepErrors.Count == 0)
+        {
+            var steps = _draft.Steps.ToList();
+            _step = steps[steps.IndexOf(_step) + 1];
+        }
+    }
+
+    private void Back()
+    {
+        _stepErrors = [];
+        _saveError = null;
+        var steps = _draft!.Steps.ToList();
+        _step = steps[Math.Max(0, steps.IndexOf(_step) - 1)];
+    }
+
+    private async Task SaveAsync()
+    {
+        var draft = _draft!;
+        _stepErrors = [.. draft.Validate(WizardStep.Review)];
+        if (_stepErrors.Count > 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        _saveError = null;
+        try
+        {
+            if (draft.IsEdit)
+            {
+                await Agent.UpdateJobAsync(draft.JobId!, draft.ToSpec(draft.DestinationId), _cts.Token);
+            }
+            else
+            {
+                var destinationId = await EnsureDestinationAsync(draft);
+                await Agent.CreateJobAsync(draft.ToSpec(destinationId), _cts.Token);
+                if (_newDestination is not null)
+                {
+                    _jobCreated = true;
+                    return;
+                }
+            }
+
+            Navigation.NavigateTo("");
+        }
+        catch (AgentCallException ex)
+        {
+            _saveError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Creates or connects the destination when the user asked for a new one. Once it exists the draft switches to
+    /// it, so a retry (say, after the agent refused the job) does not try to create it again, and the password
+    /// leaves the page.
+    /// </summary>
+    private async Task<string> EnsureDestinationAsync(JobDraft draft)
+    {
+        Destination destination;
+        switch (draft.DestinationChoice)
+        {
+            case DestinationChoice.CreateNew:
+                destination = await Agent.CreateDestinationAsync(draft.ToCreateDestination(), _cts.Token);
+                _newDestination = destination;
+                _kitPassword = draft.Password;
+                break;
+            case DestinationChoice.ConnectExisting:
+                destination = await Agent.ConnectDestinationAsync(draft.ToConnectDestination(), _cts.Token);
+                break;
+            default:
+                return draft.DestinationId;
+        }
+
+        _destinations.Add(destination);
+        draft.DestinationChoice = DestinationChoice.Existing;
+        draft.DestinationId = destination.Id;
+        draft.ForgetPasswords();
+        return destination.Id;
+    }
+
+    private async Task SaveKitAsync()
+    {
+        var destination = _newDestination!;
+        var kit = RecoveryKit.Create(new RecoveryKitInfo(destination.Name, destination.Location, Environment.MachineName,
+            Monitor.Status?.MachineIdentity ?? "", Time.GetLocalNow())
+        {
+            Password = _kitIncludePassword ? _kitPassword : null,
+        });
+        _kitSaved = await Shell.SaveFileAsync(RecoveryKit.FileName(destination.Name), kit, _cts.Token) ?? _kitSaved;
+    }
+
+    private void Done()
+    {
+        _kitPassword = null;
+        Navigation.NavigateTo("");
+    }
+
+    private async Task DeleteAsync()
+    {
+        _busy = true;
+        _saveError = null;
+        try
+        {
+            await Agent.DeleteJobAsync(_draft!.JobId!, _cts.Token);
+            Navigation.NavigateTo("");
+        }
+        catch (AgentCallException ex)
+        {
+            _saveError = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _draft?.ForgetPasswords();
+        _kitPassword = null;
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

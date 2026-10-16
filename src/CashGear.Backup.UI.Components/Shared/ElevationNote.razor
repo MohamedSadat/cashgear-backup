@@ -1,0 +1,19 @@
+@* Shown next to setup and restore buttons when Windows will ask for administrator approval (UAC) first. *@
+@implements IDisposable
+@inject AgentMonitor Monitor
+
+@if (!Monitor.CanManage)
+{
+    <p class="elevation-note">
+        <svg class="shield" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 2 3.5v4C2 11 4.6 14 8 15c3.4-1 6-4 6-7.5v-4Z" /></svg>
+        Windows will ask for administrator approval for this step.
+    </p>
+}
+
+@code {
+    protected override void OnInitialized() => Monitor.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Monitor.Changed -= OnChanged;
+}

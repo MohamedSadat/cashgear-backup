@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The desktop app's side of the agent's pipe API: the client the UI uses, the check that the pipe is served
+       by the agent service, and the elevated helper that makes Manage calls after a UAC prompt. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CashGear.Backup.Client.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CashGear.Backup.Contracts\CashGear.Backup.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\elevation.proto" GrpcServices="None" />
+  </ItemGroup>
+
+</Project>

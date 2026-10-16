@@ -1,0 +1,141 @@
+@* The folders and files inside one restore point, and which of them to restore. *@
+@implements IDisposable
+@inject IAgentClient Agent
+@inject TimeProvider Time
+
+<nav class="crumbs" aria-label="Folder">
+    <button type="button" class="link" @onclick='() => OpenAsync("")' disabled="@Disabled">All files</button>
+    @foreach (var (name, path) in Crumbs)
+    {
+        <span class="sep">/</span>
+        <button type="button" class="link" @onclick="() => OpenAsync(path)" disabled="@Disabled">@name</button>
+    }
+</nav>
+
+<ErrorBox Message="@_error" />
+
+@if (_entries is null)
+{
+    @if (_error is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+}
+else
+{
+    <table class="entries">
+        <thead>
+            <tr><th><span class="sr-only">Restore</span></th><th>Name</th><th class="num">Size</th><th>Changed</th></tr>
+        </thead>
+        <tbody>
+            <tr class="entry-here">
+                <td><input type="radio" name="pick" id="pick-folder" checked="@(Selected == Folder)" @onchange="() => SelectAsync(Folder)" disabled="@Disabled" /></td>
+                <td colspan="3"><label for="pick-folder">@(Folder.Length == 0 ? "Everything in this restore point" : "This whole folder")</label></td>
+            </tr>
+            @foreach (var entry in _entries)
+            {
+                <tr class="entry">
+                    <td><input type="radio" name="pick" class="pick" checked="@(Selected == entry.Path)" @onchange="() => SelectAsync(entry.Path)" disabled="@Disabled" aria-label="Restore @entry.Name" /></td>
+                    <td>
+                        @if (entry.Kind == EntryKind.Directory)
+                        {
+                            <button type="button" class="link open name" @onclick="() => OpenAsync(entry.Path)" disabled="@Disabled">@entry.Name</button>
+                        }
+                        else
+                        {
+                            <span class="name">@entry.Name</span>
+                        }
+                    </td>
+                    <td class="num">@(entry.Kind == EntryKind.File ? Format.Bytes(entry.Size) : "")</td>
+                    <td>@Format.When(entry.ModifiedAt, Time)</td>
+                </tr>
+            }
+            @if (_entries.Count == 0)
+            {
+                <tr><td></td><td colspan="3" class="muted">This folder is empty.</td></tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private IReadOnlyList<SnapshotEntry>? _entries;
+    private (string SnapshotId, string Folder)? _loaded;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public string JobId { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string SnapshotId { get; set; } = "";
+
+    /// <summary>The folder shown, relative to the snapshot root with '/' separators; empty for the root.</summary>
+    [Parameter]
+    public string Folder { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string> FolderChanged { get; set; }
+
+    /// <summary>What to restore: a folder or file path inside the snapshot; empty for everything.</summary>
+    [Parameter]
+    public string Selected { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string> SelectedChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private IEnumerable<(string Name, string Path)> Crumbs
+    {
+        get
+        {
+            var parts = Folder.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < parts.Length; i++)
+            {
+                yield return (parts[i], string.Join('/', parts[..(i + 1)]));
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == (SnapshotId, Folder))
+        {
+            return;
+        }
+
+        _loaded = (SnapshotId, Folder);
+        _entries = null;
+        _error = null;
+        try
+        {
+            var entries = await Agent.BrowseSnapshotAsync(JobId, SnapshotId, Folder, _cts.Token);
+            _entries = [.. entries
+                .OrderBy(e => e.Kind == EntryKind.Directory ? 0 : 1)
+                .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task OpenAsync(string path)
+    {
+        await FolderChanged.InvokeAsync(path);
+        await SelectedChanged.InvokeAsync(path);
+    }
+
+    private Task SelectAsync(string path) => SelectedChanged.InvokeAsync(path);
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

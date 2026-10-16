@@ -1,0 +1,629 @@
+syntax = "proto3";
+
+package cashgear.backup.v1;
+
+option csharp_namespace = "CashGear.Backup.Contracts.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// The agent's API for the desktop app. Served only on a local named pipe (AgentChannel), never on TCP.
+//
+// Access levels (enforced by the agent): read calls are open to anyone the pipe lets in (the interactive
+// user and administrators); RunJobNow and CancelRun too; calls marked "Manage" need an elevated
+// administrator unless the agent is configured otherwise.
+//
+// Errors are gRPC statuses; the trailer "cashgear-error-kind" carries the engine-neutral error kind
+// (for example "InvalidPassword", "RestoreTargetNotEmpty") for the UI to act on.
+service BackupAgent {
+  rpc GetStatus (GetStatusRequest) returns (AgentStatus);
+
+  rpc ListDestinations (ListDestinationsRequest) returns (ListDestinationsResponse);
+  // Manage. Initializes a new, encrypted repository at the location and remembers it.
+  rpc CreateDestination (CreateDestinationRequest) returns (Destination);
+  // Manage. Adds an existing repository (a reinstall, or another PC's repository).
+  rpc ConnectDestination (ConnectDestinationRequest) returns (Destination);
+
+  rpc ListJobs (ListJobsRequest) returns (ListJobsResponse);
+  // Manage.
+  rpc CreateJob (CreateJobRequest) returns (Job);
+  // Manage. The destination and source folder of a job cannot change; create a new job instead.
+  rpc UpdateJob (UpdateJobRequest) returns (Job);
+  // Manage. Removes the job definition only: its backups stay in the repository.
+  rpc DeleteJob (DeleteJobRequest) returns (DeleteJobResponse);
+  rpc RunJobNow (RunJobNowRequest) returns (Run);
+
+  rpc ListRuns (ListRunsRequest) returns (ListRunsResponse);
+  // Progress of a run until it ends. The last message has `finished` set; a finished run sends only that.
+  rpc WatchRun (WatchRunRequest) returns (stream RunProgress);
+  rpc CancelRun (CancelRunRequest) returns (CancelRunResponse);
+
+  rpc ListSnapshots (ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc BrowseSnapshot (BrowseSnapshotRequest) returns (BrowseSnapshotResponse);
+  // Finds files and folders whose name contains the query (any case) in one snapshot. Streams matches as the
+  // snapshot is walked; the last message has `done` set and says whether the search stopped at a limit.
+  rpc SearchSnapshot (SearchSnapshotRequest) returns (stream SearchSnapshotResponse);
+  // Manage. Restores into a new or empty folder, or back into the job's folder without replacing anything
+  // there (see RestoreLocation). Never overwrites.
+  rpc StartRestore (StartRestoreRequest) returns (Run);
+
+  // Checks a job's backups now: the structure of every snapshot plus a sample of file contents read back from
+  // the destination (Settings.verify_sample_percent). Recorded as a run of kind VERIFY.
+  rpc VerifyJobNow (VerifyJobNowRequest) returns (Run);
+  // What needs the user's attention now: failed backups or checks, skipped files, no backup for too long.
+  rpc ListAlerts (ListAlertsRequest) returns (ListAlertsResponse);
+
+  // The email password is never returned.
+  rpc GetSettings (GetSettingsRequest) returns (Settings);
+  // Manage. Carries the email password: never log this message.
+  rpc UpdateSettings (UpdateSettingsRequest) returns (Settings);
+  // Manage. Sends a test email with the given settings (an empty password uses the saved one). Carries the
+  // email password: never log this message.
+  rpc SendTestEmail (SendTestEmailRequest) returns (SendTestEmailResponse);
+
+  // The edition in force and what it allows. Without an activated licence: the Free edition.
+  rpc GetLicence (GetLicenceRequest) returns (LicenceStatus);
+  // Manage. Activates a licence key with the licence server for this PC.
+  rpc ActivateLicence (ActivateLicenceRequest) returns (LicenceStatus);
+  // Manage. Back to the Free edition on this PC.
+  rpc RemoveLicence (RemoveLicenceRequest) returns (LicenceStatus);
+
+  rpc GetUpdateStatus (GetUpdateStatusRequest) returns (UpdateStatus);
+  // Operate. Looks for an update now (otherwise once a day); a verified update installs when no run is active.
+  rpc CheckForUpdates (CheckForUpdatesRequest) returns (UpdateStatus);
+
+  // Manage. A zip for support: the agent's recent logs and a summary of destinations, jobs, runs and settings,
+  // without passwords, keys or other secrets, and with user folder names replaced.
+  rpc CreateSupportBundle (CreateSupportBundleRequest) returns (SupportBundle);
+}
+
+message GetStatusRequest {}
+
+message AgentStatus {
+  string agent_version = 1;
+  // The stable name this PC's snapshots are recorded under.
+  string machine_identity = 2;
+  google.protobuf.Timestamp started_at = 3;
+  // False while the agent is still connecting its destinations after a start.
+  bool ready = 4;
+  // Whether the caller may use the "Manage" calls.
+  bool caller_can_manage = 5;
+}
+
+enum DestinationKind {
+  DESTINATION_KIND_UNSPECIFIED = 0;
+  // A local disk, removable drive or UNC share the agent can reach as it is.
+  DESTINATION_KIND_FILE_SYSTEM = 1;
+  // A folder on an SMB share (\\server\share\folder in location) reached with its own account (ShareSettings).
+  DESTINATION_KIND_NETWORK_SHARE = 2;
+  // A folder on an SFTP server (SftpSettings).
+  DESTINATION_KIND_SFTP = 3;
+  // A bucket on Amazon S3 or an S3-compatible service (S3Settings).
+  DESTINATION_KIND_S3 = 4;
+}
+
+enum DestinationState {
+  DESTINATION_STATE_UNSPECIFIED = 0;
+  DESTINATION_STATE_CONNECTED = 1;
+  DESTINATION_STATE_UNAVAILABLE = 2;
+  DESTINATION_STATE_CONNECTING = 3;
+}
+
+message Destination {
+  string id = 1;
+  string name = 2;
+  DestinationKind kind = 3;
+  string location = 4;
+  DestinationState state = 5;
+  // Why the destination is unavailable.
+  string state_message = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ListDestinationsRequest {}
+
+message ListDestinationsResponse {
+  repeated Destination destinations = 1;
+}
+
+// The account a network share is opened with. Carries its password: never log this message.
+message ShareSettings {
+  string username = 1;
+  // Write-only.
+  string password = 2;
+}
+
+// Carries the SFTP password or private key: never log this message.
+message SftpSettings {
+  string host = 1;
+  // 0 means 22.
+  int32 port = 2;
+  string username = 3;
+  // Write-only. Either a password or a private key.
+  string password = 4;
+  // Write-only. An OpenSSH private key (the text of the key file).
+  string private_key = 5;
+  // Folder on the server, for example /backups/pc1.
+  string path = 6;
+  // A known_hosts line for every host key the server offers, as the user confirmed them (the app reads them
+  // with the server's fingerprints first). A server presenting another key is refused.
+  repeated string known_hosts = 7;
+}
+
+// Carries the S3 secret key: never log this message.
+message S3Settings {
+  // host[:port] without https://, for example s3.eu-central-1.amazonaws.com.
+  string endpoint = 1;
+  string bucket = 2;
+  // Optional folder inside the bucket, for example pc1/.
+  string prefix = 3;
+  string region = 4;
+  string access_key_id = 5;
+  // Write-only.
+  string secret_access_key = 6;
+  // Plain HTTP: only for a service on the local network that has no HTTPS.
+  bool insecure_http = 7;
+}
+
+// Carries the repository password and the destination's own credentials: never log this message.
+message CreateDestinationRequest {
+  string name = 1;
+  DestinationKind kind = 2;
+  // FILE_SYSTEM and NETWORK_SHARE: the folder. Ignored for SFTP and S3 (the settings say where).
+  string location = 3;
+  string password = 4;
+  oneof settings {
+    ShareSettings share = 5;
+    SftpSettings sftp = 6;
+    S3Settings s3 = 7;
+  }
+}
+
+// Carries the repository password and the destination's own credentials: never log this message.
+message ConnectDestinationRequest {
+  string name = 1;
+  DestinationKind kind = 2;
+  string location = 3;
+  string password = 4;
+  oneof settings {
+    ShareSettings share = 5;
+    SftpSettings sftp = 6;
+    S3Settings s3 = 7;
+  }
+}
+
+message Retention {
+  // At least 1.
+  int32 keep_latest = 1;
+  int32 keep_hourly = 2;
+  int32 keep_daily = 3;
+  int32 keep_weekly = 4;
+  int32 keep_monthly = 5;
+  int32 keep_annual = 6;
+}
+
+enum Compression {
+  // Treated as BALANCED.
+  COMPRESSION_UNSPECIFIED = 0;
+  COMPRESSION_OFF = 1;
+  COMPRESSION_FASTEST = 2;
+  COMPRESSION_BALANCED = 3;
+  COMPRESSION_SMALLEST = 4;
+}
+
+message Schedule {
+  oneof kind {
+    ManualSchedule manual = 1;
+    DailySchedule daily = 2;
+    IntervalSchedule interval = 3;
+  }
+}
+
+message ManualSchedule {}
+
+message DailySchedule {
+  // Local time, 0-1439.
+  int32 minute_of_day = 1;
+  // 0 = Sunday ... 6 = Saturday; empty means every day.
+  repeated int32 days_of_week = 2;
+}
+
+message IntervalSchedule {
+  // 1-24.
+  int32 hours = 1;
+}
+
+message JobSpec {
+  string name = 1;
+  string destination_id = 2;
+  string source_path = 3;
+  // Absent: the default retention.
+  Retention retention = 4;
+  // gitignore-style patterns relative to the source folder.
+  repeated string excludes = 5;
+  Compression compression = 6;
+  // Absent: manual.
+  Schedule schedule = 7;
+  bool enabled = 8;
+}
+
+message Job {
+  string id = 1;
+  JobSpec spec = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  // The latest backup run, if any.
+  Run last_run = 5;
+  google.protobuf.Timestamp next_run_at = 6;
+}
+
+message ListJobsRequest {}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CreateJobRequest {
+  JobSpec spec = 1;
+}
+
+message UpdateJobRequest {
+  string id = 1;
+  JobSpec spec = 2;
+}
+
+message DeleteJobRequest {
+  string id = 1;
+}
+
+message DeleteJobResponse {}
+
+message RunJobNowRequest {
+  string job_id = 1;
+}
+
+enum RunKind {
+  RUN_KIND_UNSPECIFIED = 0;
+  RUN_KIND_BACKUP = 1;
+  RUN_KIND_RESTORE = 2;
+  // A check of the job's backups: files = files read back, bytes = bytes read back, failed_items = problems found.
+  RUN_KIND_VERIFY = 3;
+}
+
+enum RunState {
+  RUN_STATE_UNSPECIFIED = 0;
+  RUN_STATE_RUNNING = 1;
+  // A new, complete restore point with nothing skipped (or a restore of every item).
+  RUN_STATE_SUCCEEDED = 2;
+  // A restore point exists but some items could not be read; see failed_items.
+  RUN_STATE_COMPLETED_WITH_WARNINGS = 3;
+  RUN_STATE_FAILED = 4;
+  RUN_STATE_CANCELED = 5;
+}
+
+enum RunTrigger {
+  RUN_TRIGGER_UNSPECIFIED = 0;
+  RUN_TRIGGER_MANUAL = 1;
+  RUN_TRIGGER_SCHEDULED = 2;
+  // A scheduled time passed while the PC was off or asleep.
+  RUN_TRIGGER_CATCH_UP = 3;
+}
+
+message FailedItem {
+  string path = 1;
+  string error = 2;
+}
+
+message Run {
+  string id = 1;
+  string job_id = 2;
+  RunKind kind = 3;
+  RunState state = 4;
+  RunTrigger trigger = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp finished_at = 7;
+  // Backup: the restore point it recorded. Restore: the snapshot restored from.
+  string snapshot_id = 8;
+  int64 files = 9;
+  int64 bytes = 10;
+  int64 failed_item_count = 11;
+  // The first failed items; failed_item_count is exact.
+  repeated FailedItem failed_items = 12;
+  string message = 13;
+  string restore_target = 14;
+}
+
+message ListRunsRequest {
+  // Empty: runs of every job.
+  string job_id = 1;
+  // Newest first; 0 means 50.
+  int32 limit = 2;
+}
+
+message ListRunsResponse {
+  repeated Run runs = 1;
+}
+
+message WatchRunRequest {
+  string run_id = 1;
+}
+
+message RunProgress {
+  string run_id = 1;
+  RunState state = 2;
+  // Backup: files and bytes examined so far. Restore: restored so far.
+  int64 files_processed = 3;
+  int64 bytes_processed = 4;
+  // Backup: new or changed data read.
+  int64 files_hashed = 5;
+  int64 bytes_hashed = 6;
+  // Backup: the engine's size estimate; 0 when unknown.
+  int64 estimated_files = 7;
+  int64 estimated_bytes = 8;
+  int64 error_count = 9;
+  // Set on the last message only.
+  Run finished = 10;
+}
+
+message CancelRunRequest {
+  string run_id = 1;
+}
+
+message CancelRunResponse {}
+
+message Snapshot {
+  string id = 1;
+  string job_id = 2;
+  string source_path = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int64 files = 6;
+  int64 directories = 7;
+  int64 bytes = 8;
+  int64 failed_item_count = 9;
+  // False for a partial snapshot (for example a canceled run); never offer it as a restore point by default.
+  bool complete = 10;
+  string incomplete_reason = 11;
+}
+
+message ListSnapshotsRequest {
+  string job_id = 1;
+}
+
+message ListSnapshotsResponse {
+  // Newest first.
+  repeated Snapshot snapshots = 1;
+}
+
+enum EntryKind {
+  ENTRY_KIND_UNSPECIFIED = 0;
+  ENTRY_KIND_FILE = 1;
+  ENTRY_KIND_DIRECTORY = 2;
+  ENTRY_KIND_SYMLINK = 3;
+  ENTRY_KIND_OTHER = 4;
+}
+
+message SnapshotEntry {
+  string name = 1;
+  // Relative to the snapshot root, '/'-separated.
+  string path = 2;
+  EntryKind kind = 3;
+  int64 size = 4;
+  google.protobuf.Timestamp modified_at = 5;
+}
+
+message BrowseSnapshotRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Folder inside the snapshot; empty for the root.
+  string path = 3;
+}
+
+message BrowseSnapshotResponse {
+  repeated SnapshotEntry entries = 1;
+}
+
+enum RestoreLocation {
+  // Treated as NEW_FOLDER.
+  RESTORE_LOCATION_UNSPECIFIED = 0;
+  // Into target_folder, which must not exist yet or be empty.
+  RESTORE_LOCATION_NEW_FOLDER = 1;
+  // Back where the files came from, inside the job's folder. Nothing there is replaced: a file that is already
+  // there and differs is kept, and the restored copy is written next to it as "name (restored <date time>).ext";
+  // identical files are left as they are. Not while a backup of the job runs (and no backup starts meanwhile).
+  RESTORE_LOCATION_ORIGINAL = 2;
+}
+
+message StartRestoreRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Folder or file inside the snapshot; empty restores everything.
+  string path = 3;
+  // NEW_FOLDER: absolute path of a folder that does not exist yet or is empty. Ignored for ORIGINAL.
+  string target_folder = 4;
+  RestoreLocation location = 5;
+}
+
+message SearchSnapshotRequest {
+  string job_id = 1;
+  string snapshot_id = 2;
+  // Part of a file or folder name; any case. At least 2 characters.
+  string query = 3;
+  // 0 means 200; at most 1000.
+  int32 max_results = 4;
+}
+
+message SearchSnapshotResponse {
+  repeated SnapshotEntry matches = 1;
+  // Set on the last message.
+  bool done = 2;
+  // The search stopped at max_results or at the agent's limit on folders searched.
+  bool truncated = 3;
+  int64 folders_searched = 4;
+}
+
+message VerifyJobNowRequest {
+  string job_id = 1;
+}
+
+enum AlertKind {
+  ALERT_KIND_UNSPECIFIED = 0;
+  // No restore point for longer than Settings.alert_after_days (the PC was off, the destination unplugged...).
+  ALERT_KIND_NO_RECENT_BACKUP = 1;
+  // The job's latest backup failed.
+  ALERT_KIND_BACKUP_FAILED = 2;
+  // The job's latest backup recorded a restore point but could not read some files.
+  ALERT_KIND_BACKUP_SKIPPED_FILES = 3;
+  // The job's latest check found damaged or missing data, or could not run.
+  ALERT_KIND_VERIFY_FAILED = 4;
+}
+
+message Alert {
+  // Stable while the condition lasts; a new failure gets a new id.
+  string id = 1;
+  AlertKind kind = 2;
+  string job_id = 3;
+  string job_name = 4;
+  string message = 5;
+  google.protobuf.Timestamp since = 6;
+}
+
+message ListAlertsRequest {}
+
+message ListAlertsResponse {
+  // Most serious first.
+  repeated Alert alerts = 1;
+}
+
+enum SmtpSecurity {
+  // Treated as STARTTLS.
+  SMTP_SECURITY_UNSPECIFIED = 0;
+  // Plain connection upgraded with STARTTLS (usually port 587). Refused if the server cannot upgrade.
+  SMTP_SECURITY_STARTTLS = 1;
+  // TLS from the start (usually port 465).
+  SMTP_SECURITY_TLS = 2;
+  // No encryption: only without a username and password (a relay on the local network).
+  SMTP_SECURITY_NONE = 3;
+}
+
+message EmailSettings {
+  bool enabled = 1;
+  string smtp_host = 2;
+  // 0 means the usual port for the security mode.
+  int32 smtp_port = 3;
+  SmtpSecurity security = 4;
+  string username = 5;
+  // Write-only. Empty in an update keeps the saved password; GetSettings never returns it.
+  string password = 6;
+  // Read-only: a password is saved.
+  bool password_saved = 7;
+  // Set to clear the saved password.
+  bool clear_password = 8;
+  string from_address = 9;
+  // One or more addresses separated by commas or semicolons.
+  string to_addresses = 10;
+}
+
+message Settings {
+  // Alert when a job has no restore point for this many days. 1-60; 0 in an update means 3.
+  int32 alert_after_days = 1;
+  // Check each job's backups every this many days; 0 turns scheduled checks off. At most 90.
+  int32 verify_every_days = 2;
+  // Share of files read back in each check, in percent (0-100).
+  double verify_sample_percent = 3;
+  EmailSettings email = 4;
+}
+
+message GetSettingsRequest {}
+
+// Carries the email password: never log this message.
+message UpdateSettingsRequest {
+  Settings settings = 1;
+}
+
+// Carries the email password: never log this message.
+message SendTestEmailRequest {
+  EmailSettings email = 1;
+}
+
+message SendTestEmailResponse {}
+
+enum Edition {
+  EDITION_UNSPECIFIED = 0;
+  // One job, folder and network-share destinations, no email alerts.
+  EDITION_FREE = 1;
+  // Unlimited jobs, SFTP and S3 destinations, email alerts.
+  EDITION_PRO = 2;
+  // Pro, plus silent installs with a licence key.
+  EDITION_BUSINESS = 3;
+}
+
+enum LicenceState {
+  LICENCE_STATE_UNSPECIFIED = 0;
+  // No licence activated (or it could not be verified): the Free edition.
+  LICENCE_STATE_FREE = 1;
+  LICENCE_STATE_ACTIVE = 2;
+  // The licence server has not been reached for a while; everything works until grace_until.
+  LICENCE_STATE_OFFLINE_GRACE = 3;
+  // The licence ended, or the server was not reached for 30 days: new backups are paused. Restore always works.
+  LICENCE_STATE_LAPSED = 4;
+}
+
+message LicenceStatus {
+  Edition edition = 1;
+  LicenceState state = 2;
+  // The last characters of the key, to tell keys apart; never the key.
+  string key_hint = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  google.protobuf.Timestamp grace_until = 5;
+  google.protobuf.Timestamp last_checked_at = 6;
+  // What the user should know (why it lapsed, why a key was refused).
+  string message = 7;
+  // 0: unlimited.
+  int32 max_jobs = 8;
+  bool cloud_destinations = 9;
+  bool email_alerts = 10;
+  bool backups_allowed = 11;
+}
+
+message GetLicenceRequest {}
+
+// Carries the licence key: never log this message.
+message ActivateLicenceRequest {
+  string key = 1;
+}
+
+message RemoveLicenceRequest {}
+
+enum UpdateState {
+  UPDATE_STATE_UNSPECIFIED = 0;
+  // No update source is configured (no trusted signing key): nothing is checked.
+  UPDATE_STATE_NOT_CONFIGURED = 1;
+  UPDATE_STATE_UP_TO_DATE = 2;
+  // A newer version is published and is being downloaded and verified.
+  UPDATE_STATE_DOWNLOADING = 3;
+  // Downloaded and verified; installs as soon as no backup or restore runs.
+  UPDATE_STATE_READY = 4;
+  UPDATE_STATE_INSTALLING = 5;
+  // The last check or download failed; see message. Tried again later.
+  UPDATE_STATE_FAILED = 6;
+}
+
+message UpdateStatus {
+  string current_version = 1;
+  string available_version = 2;
+  UpdateState state = 3;
+  string message = 4;
+  google.protobuf.Timestamp last_checked_at = 5;
+}
+
+message GetUpdateStatusRequest {}
+
+message CheckForUpdatesRequest {}
+
+message CreateSupportBundleRequest {}
+
+message SupportBundle {
+  string file_name = 1;
+  // A zip file.
+  bytes content = 2;
+}

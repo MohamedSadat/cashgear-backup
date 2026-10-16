@@ -8,8 +8,20 @@ customer sees is .NET 10 C#.
   Snapshot: [docs/plan/2026-10-15-cashgear-backup-plan.md](docs/plan/2026-10-15-cashgear-backup-plan.md).
 - **Verified Kopia behaviour:** [spikes/KopiaSpike/FINDINGS.md](spikes/KopiaSpike/FINDINGS.md). Where it
   disagrees with the plan, FINDINGS wins (it was observed against the pinned binary).
-- **Status:** Foundation + Phase 0 done (Phase 0 gate green, see FINDINGS). Next: Phase 1, engine and
-  agent; start from the "Phase 1 to-do" list in FINDINGS.
+- **Agent design, security model and its findings:** [docs/agent.md](docs/agent.md).
+- **Desktop app design (elevation, pipe check), findings and review items:** [docs/desktop.md](docs/desktop.md).
+- **Status:** Foundation and Phases 0 to 4 done. Phase 3: snapshot timeline and search, restore back to the original
+  folder keeping both versions, checks of backups, alerts by tray and email, settings, Recovery Kit. Then network
+  shares with their own account, SFTP and S3 destinations. Phase 4: Free/Pro editions with licence activation and a
+  30-day offline grace (backups pause when lapsed, restores never), signed automatic updates, a support bundle,
+  third-party notices and an About page, and the WiX 5.0.2 MSI (`installer/`). Before shipping: install-test the
+  MSI on clean machines, and configure the licence server, update feed and signing certificate (installer
+  README). Open decisions are at the end of FINDINGS, docs/agent.md and docs/desktop.md.
+- **Phase 5 (beta and hardening):** the chaos and scale suites exist (`tests/CashGear.Backup.Hardening.Tests`,
+  [docs/hardening.md](docs/hardening.md): how to run them, what they found, and the scale results per release). Chaos
+  findings 2 and 3 are fixed: the engine ends a backup whose destination is lost (`Runs/DestinationWatch`) and
+  reports a kopia server that died; both await hand review (rule 10). Still open: the 10-20 machine beta and the help
+  docs.
 
 ## Architecture
 
@@ -26,7 +38,8 @@ Destination: local disk, SMB, SFTP, S3-compatible
 ```
 
 Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product talks to
-`IBackupEngine` (in Core, added in Phase 1).
+`IBackupEngine` (in Core); `KopiaBackupEngine` implements it, and the agent gets it through
+`IBackupEngineFactory` (`services.AddBundledBackupEngine()`).
 
 ## Hard rules
 
@@ -38,11 +51,15 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
    values. Redact any JSON `password` field before writing a request anywhere.
 3. **Async everywhere.** No `.Result`, `.Wait()` or `GetAwaiter().GetResult()`; pass
    `CancellationToken` all the way down.
-4. **Restore never overwrites by default.** All `overwrite*` flags false, target is a new empty
-   folder, and always send `restoreDirEntryAtDepth = int.MaxValue` (Kopia's REST default of 0 writes
-   `.kopia-entry` placeholder files instead of real files).
-5. **Never mark a run Succeeded** unless there is a new snapshot ID, `summary.numFailed == 0` and no
-   `incomplete` flag. Kopia's server reports task SUCCESS even when files failed.
+4. **Restore never overwrites.** Every engine restore has all `overwrite*` flags false, targets a new empty
+   folder, and sends `restoreDirEntryAtDepth = int.MaxValue` (Kopia's REST default of 0 writes
+   `.kopia-entry` placeholder files instead of real files). "Back to the original folder" is the engine restoring
+   into a new, empty staging folder inside the job's folder, then `Agent/Runs/KeepBothMerge` moving items in
+   without replacing anything (differing files keep both versions; links are moved, never followed).
+5. **Never mark a run Succeeded** unless there is exactly one new snapshot ID, `summary.numFailed == 0`,
+   `summary.numIgnoredErrors == 0` and no `incomplete` flag. Kopia's server reports task SUCCESS even
+   when files failed and when the run was canceled (`incomplete: "canceled"`). The rule lives in
+   `Runs/BackupRunClassifier.cs`.
 6. **Only the pinned `tools/kopia/kopia.exe`**, verified by SHA-256 against `tools/kopia/kopia.pin.json`.
    Never a kopia from PATH, never a user-supplied one.
 7. **Launching `kopia server start`** (see FINDINGS for why each flag is needed):
@@ -53,41 +70,103 @@ Only `CashGear.Backup.Engine.Kopia` knows Kopia exists. The rest of the product 
      --no-use-credential-manager`, `--cache-directory` and `--log-dir` inside our data folder.
    - Credentials only via env vars: `KOPIA_SERVER_USERNAME/PASSWORD`,
      `KOPIA_SERVER_CONTROL_USER/PASSWORD`, `KOPIA_PASSWORD`; set `KOPIA_CHECK_FOR_UPDATES=false`.
-     Start from an environment with every inherited `KOPIA_*` variable removed.
+     Start from an environment with every inherited `KOPIA_*` and `AWS_*` variable removed. S3 keys go only into
+     that environment (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), never into the storage config.
 8. **Write the whole Kopia policy for every source** (manual scheduling, compression, retention, VSS).
-   Kopia's defaults do not compress and *do* prune with their own retention.
+   Kopia's defaults do not compress and *do* prune with their own retention. `PUT /policy` replaces the
+   whole policy and silently drops unknown fields, so always read it back (`KopiaPolicyMapper.Differences`).
 9. **After `repo/create` or `repo/connect`, poll `/repo/status`**: the create response says
    `connected:false` even when it succeeded.
 10. **Hand review** anything touching passwords, deletion, retention or restore overwrite. Agent
     mistakes there cost customer data.
+11. **The agent runs as LocalSystem; the pipe API is its attack surface.** Calls that make it read or
+    write a folder the caller names (destinations, jobs, restore) are Manage-level and need an elevated
+    administrator (decided: the desktop app asks for UAC elevation for them; never relax it);
+    `Agent:AllowNonElevatedManage` is for tests only. Never impersonate the pipe client
+    on a request thread (docs/agent.md, finding 1), and never log gRPC request messages (they can carry
+    passwords).
+12. **The desktop app reaches the agent only through `IAgentClient`.** Every pipe connection is checked by
+    `AgentServerVerifier` (the CashGearBackupAgent service process or LocalSystem) before anything is sent; the
+    same-user trust and the pipe override exist in Debug builds only. Manage calls the app's connection may not make
+    go through the elevated helper (docs/desktop.md); keep it a whitelist of the Manage calls with process-id checks
+    on both ends of its pipe, and never put a password on a command line.
+13. **The licence never blocks a restore**, and never deletes or hides backups. A lapsed licence pauses new backups
+    only; the Free limits refuse new jobs and cloud destinations.
+14. **An update installs only after three checks pass**: the manifest's ECDSA signature (pinned keys), the MSI's
+    SHA-256 from that manifest, and its Authenticode signature by a pinned publisher thumbprint; and only while no
+    backup, restore or check runs. Never relax one of them, and never install from an unconfigured feed.
 
 ## Build and test
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\kopia\fetch-kopia.ps1   # once per clone
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\test-servers\fetch-test-servers.ps1   # once per clone (SFTP/S3 tests)
 dotnet build CashGear.Backup.slnx
 dotnet test --solution CashGear.Backup.slnx
 dotnet test --solution spikes\KopiaSpike.slnx          # Phase 0 gate: real kopia round trip
 dotnet run --project spikes\KopiaSpike -- --keep-workspace
+dotnet tool restore                                      # dotnet-ef, for state.db migrations
+dotnet tool run dotnet-ef migrations add <Name> -p src\CashGear.Backup.Data -s src\CashGear.Backup.Data -o Migrations
+powershell -NoProfile -ExecutionPolicy Bypass -File installer\build-installer.ps1 -Version 1.0.0   # the MSI
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\notices\update-notices.ps1   # after package changes
+```
+
+The chaos and scale suites are explicit tests: the solution run above skips them. Run them on purpose (sizes and the
+full scale run's settings are in [docs/hardening.md](docs/hardening.md); the local-disk-full test needs an elevated prompt):
+
+```powershell
+dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-trait "Category=Chaos"
+dotnet test --project tests\CashGear.Backup.Hardening.Tests --explicit only --filter-trait "Category=Scale"
+```
+
+Run the agent as a console app (it does not need to be a service) with its data outside ProgramData:
+
+```powershell
+$env:Agent__DataDirectory = "$env:TEMP\cashgear-dev"; $env:Agent__AllowNonElevatedManage = "true"
+dotnet run --project src\CashGear.Backup.Agent
+```
+
+Run the desktop app against that agent (Debug builds only honour these; see docs/desktop.md):
+
+```powershell
+$env:CASHGEAR_AGENT_PIPE = "<the agent's Agent__PipeName>"; $env:CASHGEAR_TRUST_DEV_AGENT = "1"
+dotnet run --project src\CashGear.Backup.Desktop
 ```
 
 Tests that need Kopia find it via `CASHGEAR_KOPIA_EXE` or `tools/kopia/kopia.exe` and fail with the
-fetch command if it is missing or does not match the pin.
+fetch command if it is missing or does not match the pin (a new git worktree needs the fetch too). The SFTP and S3
+tests do the same with the test servers in `tools/test-servers` (SFTPGo, versitygw; test-only, never shipped).
+`CashGear.Backup.Installer.Tests` reads the newest MSI in `artifacts\installer` (or `CASHGEAR_MSI`) and skips
+without one; `NoticesTests` fails when `THIRD-PARTY-NOTICES.txt` misses a shipped package, a Go module inside
+`kopia.exe` or an npm package in Kopia's web UI, or when `tools/notices/kopia-go-modules.json` was collected for
+another pin or `kopia-webui-packages.json` for another `htmluibuild` version. The
+engine and agent tests take about a minute each. To debug them, set `CASHGEAR_KEEP_TEST_WORKSPACE=1` to keep
+`%TEMP%\cashgear-tests` and `%TEMP%\cashgear-agent-tests` (the agent's log is in `data\logs` there), and
+`CASHGEAR_TEST_LOG_DIR` for one engine log per engine test, passing tests included.
 
 ## Repo map
 
 | Path | What |
 |---|---|
 | `src/CashGear.Backup.Core` | Domain types and `IBackupEngine` (engine-agnostic) |
-| `src/CashGear.Backup.Engine.Kopia` | The only Kopia-aware code: process host, REST client, DTOs, policy mapping |
-| `src/CashGear.Backup.Agent` | Windows Service: scheduler, gRPC server, notifications, updater |
-| `src/CashGear.Backup.Data` | EF Core + SQLite state |
-| `src/CashGear.Backup.Contracts` | `.proto` files and generated gRPC types |
-| `src/CashGear.Backup.UI.Components` | Razor class library: pages, wizards, file browser |
-| `src/CashGear.Backup.Desktop` | WPF host: BlazorWebView, tray icon |
-| `installer/` | WiX MSI (Phase 4; placeholder for now) |
+| `src/CashGear.Backup.Engine.Kopia` | The only Kopia-aware code: `KopiaBackupEngine`; `Api/` REST client and DTOs, `Hosting/` process host, pin, Job Object, `Policy/` job-to-policy mapping, `Runs/` run tracking and the rule-5 classifier |
+| `src/CashGear.Backup.Agent` | Windows Service: `AgentHost` (pipe-only Kestrel, gRPC), `Api/`, `Destinations/` (folder, share, SFTP, S3 settings; share connections), `Runs/` (runs, checks, keep-both merge, snapshot search), `Scheduling/` (Quartz), `Notifications/` (settings, alerts, email, housekeeping), `Licensing/` (editions, activation, offline grace), `Updates/` (signed feed, Authenticode check, msiexec), `Support/` (support bundle), `Security/` (DPAPI, caller checks, signed envelopes), `Hosting/` (lifecycle, pipe ACL) |
+| `src/CashGear.Backup.Data` | EF Core + SQLite state.db: destinations, jobs, run history, settings; `Migrations/` |
+| `src/CashGear.Backup.Contracts` | `Protos/backup_agent.proto` (the desktop app's API) and `AgentChannel` (named-pipe gRPC channel) |
+| `src/CashGear.Backup.Client` | The app's side of the API: `IAgentClient`/`AgentClient`, `Security/` pipe-server check and SFTP host-key probe, `Elevation/` UAC helper (both ends) |
+| `src/CashGear.Backup.UI.Components` | Razor class library: `Pages/` (dashboard, job wizard, restore, history, settings, about), `Shared/` components, `Model/` (wizard draft, formatting, error and licence texts), `Services/` (agent monitor, picker and shell seams) |
+| `src/CashGear.Backup.Desktop` | WPF host: BlazorWebView, tray icon, single instance; the same exe is the elevated helper |
+| `installer/` | WiX 5.0.2 MSI (`CashGear.Backup.Installer/`) and `build-installer.ps1`; its README lists what is open before shipping |
 | `tools/kopia/` | Kopia pin, fetch script, LICENSE (exe is gitignored) |
-| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects |
+| `tools/test-servers/` | Pins and fetch script for the SFTP and S3 servers the tests run (binaries gitignored) |
+| `tools/notices/` | Generates `THIRD-PARTY-NOTICES.txt` (repo root; shipped beside the app); `collect-kopia-go-modules.ps1` records the Go modules in `kopia.exe` and their licence files, `collect-kopia-webui-packages.ps1` the npm packages in Kopia's web UI inside it (rerun both after a pin change) |
+| `tests/` | xUnit v3 test projects; `tests/Shared` holds helpers linked into several projects (pinned binary, tree fixture and byte-compare manifest, test servers, the chaos proxy that cuts the network and the quota-limited SFTP server) |
+| `tests/CashGear.Backup.Client.Tests` | `AgentClient`, the pipe-server check and the elevated-helper relay against the agent hosted in-process (links `AgentHarness`) |
+| `tests/CashGear.Backup.UI.Components.Tests` | bUnit tests of the pages and components against a fake `IAgentClient`, plus the view models |
+| `tests/CashGear.Backup.Agent.Tests` | state.db, DPAPI, schedules, pipe ACL, and the whole agent hosted in-process on a private pipe, driven through `AgentChannel` against the pinned kopia.exe |
+| `tests/CashGear.Backup.Installer.Tests` | The built MSI's tables (service, ACL, shortcut, licence key, uninstall keeps data) |
+| `tests/CashGear.Backup.Engine.Kopia.IntegrationTests` | `Contract/` one test per Kopia endpoint, `Engine/` round trips and data-safety rules through `IBackupEngine`, `Hosting/` process host, `Unit/` no-Kopia checks |
+| `tests/CashGear.Backup.Hardening.Tests` | Phase 5 suites (explicit tests): `Chaos/` agent or kopia killed, network cut (SFTP, S3), destination full, each followed by a successful run and a clean repository check; `Scale/` many small files and one big file, timed with peak memory into `artifacts\scale\results.jsonl`. `Infrastructure/` runs the agent as its own process in a Job Object, a VHDX volume, an independent kopia consistency check |
 | `spikes/KopiaSpike` | Phase 0 throwaway spike and its tests; lift proven code into Engine.Kopia, then delete |
 | `docs/plan/` | Plan snapshots |
 

@@ -9,6 +9,8 @@
   <ItemGroup>
     <Compile Include="..\..\tests\Shared\RepoPaths.cs" Link="Shared\RepoPaths.cs" />
     <Compile Include="..\..\tests\Shared\KopiaTestBinary.cs" Link="Shared\KopiaTestBinary.cs" />
+    <Compile Include="..\..\tests\Shared\TreeFixture.cs" Link="Shared\TreeFixture.cs" />
+    <Compile Include="..\..\tests\Shared\TreeManifest.cs" Link="Shared\TreeManifest.cs" />
   </ItemGroup>
 
   <ItemGroup>

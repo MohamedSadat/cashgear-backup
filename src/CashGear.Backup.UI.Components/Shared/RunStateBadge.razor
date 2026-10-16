@@ -1,0 +1,7 @@
+@* A run's result in words and colour. Completed with warnings never looks like a success. *@
+<span class="badge badge-@RunStates.Tone(State)">@RunStates.Text(State)</span>
+
+@code {
+    [Parameter]
+    public RunState State { get; set; }
+}

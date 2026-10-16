@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CashGear Backup, per machine, x64. Installs the agent service (LocalSystem, automatic delayed start, restarted
+  on failure), the desktop app (Start menu, tray icon at sign-in) and the pinned kopia.exe beside the agent.
+  The data folder (C:\ProgramData\CashGear\Backup) is created for SYSTEM and Administrators only.
+
+  Silent install:   msiexec /i CashGearBackup-<version>.msi /qn [LICENCEKEY=<key>]
+  Silent uninstall: msiexec /x CashGearBackup-<version>.msi /qn
+
+  Uninstall removes the programs, the service and the shortcuts. It leaves the data folder (settings, state,
+  logs) and never touches backups: they live at their destinations.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="CashGear Backup" Manufacturer="CashGear" Version="$(ProductVersion)" UpgradeCode="F1AE5C97-47FD-45EF-A16B-BFDAF45F00A1"
+           Scope="perMachine" Compressed="yes" InstallerVersion="500">
+    <SummaryInformation Description="CashGear Backup" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of CashGear Backup is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="AppIcon" SourceFile="$(DesktopDir)\CashGear.Backup.Desktop.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <!-- A key for a silent install: written to licence.ini in the data folder and activated by the agent at its
+         next start (which deletes the file). Hidden keeps it out of the installer log. -->
+    <Property Id="LICENCEKEY" Hidden="yes" Secure="yes" />
+
+    <Launch Condition="Installed OR VersionNT64 &gt;= 603" Message="CashGear Backup needs 64-bit Windows 10 or later." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="CashGear Backup">
+        <Directory Id="AGENTFOLDER" Name="Agent" />
+        <Directory Id="APPFOLDER" Name="App" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="CASHGEARDATAROOT" Name="CashGear">
+        <Directory Id="DATAFOLDER" Name="Backup" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Delayed automatic start (the MSI's own MsiServiceConfig table is documented as unreliable): sc.exe right
+         after the service is installed, without impersonation. -->
+    <SetProperty Id="SetServiceDelayedStart" Before="SetServiceDelayedStart" Sequence="execute"
+                 Value="&quot;[System64Folder]sc.exe&quot; config CashGearBackupAgent start= delayed-auto" />
+    <CustomAction Id="SetServiceDelayedStart" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="SetServiceDelayedStart" After="InstallServices" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main" Title="CashGear Backup" Level="1" AllowAbsent="no">
+      <ComponentRef Id="AgentService" />
+      <ComponentGroupRef Id="AgentFiles" />
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="DataFolder" />
+      <ComponentRef Id="LicenceKeyFile" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="RunAtSignIn" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <!-- The service is the agent exe's component. ServiceControl stops it before files change (upgrade, update,
+         uninstall) and starts it again after. -->
+    <Component Id="AgentService" Directory="AGENTFOLDER">
+      <File Id="AgentExe" Source="$(AgentDir)\CashGear.Backup.Agent.exe" KeyPath="yes" />
+      <ServiceInstall Id="AgentServiceInstall" Name="CashGearBackupAgent" DisplayName="CashGear Backup Agent"
+                      Description="Runs CashGear Backup's scheduled backups, checks and restores."
+                      Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes">
+        <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart"
+                            RestartServiceDelayInSeconds="60" ResetPeriodInDays="1" />
+      </ServiceInstall>
+      <ServiceControl Id="AgentServiceControl" Name="CashGearBackupAgent" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      <util:EventSource Name="CashGear Backup" Log="Application"
+                        EventMessageFile="[WindowsFolder]Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll" />
+    </Component>
+
+    <ComponentGroup Id="AgentFiles" Directory="AGENTFOLDER">
+      <Files Include="$(AgentDir)\**">
+        <Exclude Files="$(AgentDir)\CashGear.Backup.Agent.exe" />
+        <Exclude Files="$(AgentDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AppFiles" Directory="APPFOLDER">
+      <Files Include="$(DesktopDir)\**">
+        <Exclude Files="$(DesktopDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <!-- SYSTEM and Administrators only, not inherited from ProgramData (where users may create files). -->
+    <Component Id="DataFolder" Directory="DATAFOLDER" Guid="72874D6F-6552-4043-A55D-8BBB5E22A0FE">
+      <CreateFolder>
+        <PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+      </CreateFolder>
+    </Component>
+
+    <Component Id="LicenceKeyFile" Directory="DATAFOLDER" Guid="8D80C306-E025-4C2D-A758-9E39E8995A49" Condition="LICENCEKEY">
+      <IniFile Id="LicenceKeyIni" Name="licence.ini" Directory="DATAFOLDER" Section="Licence" Key="Key" Value="[LICENCEKEY]" Action="addLine" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="5AACE3DF-C076-447D-815D-CACA5C85CB91">
+      <Shortcut Id="AppShortcut" Name="CashGear Backup" Description="Back up your files and get them back"
+                Target="[APPFOLDER]CashGear.Backup.Desktop.exe" WorkingDirectory="APPFOLDER" />
+      <RegistryValue Root="HKLM" Key="Software\CashGear\Backup" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+
+    <!-- The tray icon for everyone who signs in (the app shows its window only when opened). -->
+    <Component Id="RunAtSignIn" Directory="APPFOLDER" Guid="E5377AF1-B6A6-442D-BAFD-EC90CED88162">
+      <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="CashGear Backup" Type="string"
+                     Value="&quot;[APPFOLDER]CashGear.Backup.Desktop.exe&quot; --tray" KeyPath="yes" />
+    </Component>
+  </Fragment>
+</Wix>

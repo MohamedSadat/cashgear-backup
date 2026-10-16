@@ -1,0 +1,304 @@
+@page "/"
+@implements IAsyncDisposable
+@inject IAgentClient Agent
+@inject AgentMonitor Monitor
+@inject UiOptions Options
+@inject TimeProvider Time
+
+<div class="page-head">
+    <h1>Your backups</h1>
+    <a class="button primary" href="jobs/new">Add a backup</a>
+</div>
+
+@if (_licence is { State: LicenceState.OfflineGrace or LicenceState.Lapsed } licence)
+{
+    <div id="licence-banner" class="alert alert-@(licence.State == LicenceState.Lapsed ? "error" : "warn")" role="status">
+        <strong>Licence</strong>
+        <span>@licence.Message</span>
+        <a href="settings">Licence settings</a>
+    </div>
+}
+
+@if (_alerts.Count > 0)
+{
+    <section id="alerts" class="alerts" aria-label="Needs your attention">
+        @foreach (var alert in _alerts)
+        {
+            <div class="alert alert-@Alerts.Tone(alert.Kind)" role="status">
+                <strong>@alert.JobName</strong>
+                <span>@alert.Message</span>
+                <span class="muted">since @Format.When(alert.Since, Time)</span>
+            </div>
+        }
+    </section>
+}
+
+@if (_jobs is null)
+{
+    @if (_connectionProblem)
+    {
+        <p id="not-connected" class="muted">Your backups show here once the backup service is running.</p>
+    }
+    else if (_error is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    <ErrorBox Message="@_error" />
+}
+else if (_jobs.Count == 0)
+{
+    <section id="empty-state" class="empty">
+        <h2>No backups yet</h2>
+        <p>Choose a folder and a place to keep copies of it: an external drive, another disk or a network share.</p>
+        <a class="button primary" href="jobs/new">Set up your first backup</a>
+    </section>
+}
+else
+{
+    <ErrorBox Message="@_error" />
+    <div class="job-list">
+        @foreach (var job in _jobs)
+        {
+            var runs = _runs.GetValueOrDefault(job.Id, []);
+            <JobCard @key="job.Id"
+                     Job="job"
+                     Destination="@_destinations.GetValueOrDefault(job.Spec.DestinationId)"
+                     Runs="runs"
+                     Progress="@_progress.GetValueOrDefault(job.Id)"
+                     LastCheck="@runs.FirstOrDefault(r => r.Kind == RunKind.Verify && r.State != RunState.Running)"
+                     Checking="_checking.ContainsKey(job.Id)"
+                     Error="@_jobErrors.GetValueOrDefault(job.Id)"
+                     CanRun="Monitor.IsReady"
+                     OnBackupNow="() => BackupNowAsync(job)"
+                     OnCancel="() => CancelAsync(job)"
+                     OnVerifyNow="() => VerifyNowAsync(job)" />
+        }
+    </div>
+}
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Dictionary<string, IReadOnlyList<Run>> _runs = [];
+    private readonly Dictionary<string, RunProgress> _progress = [];
+    private readonly Dictionary<string, string> _checking = [];
+    private readonly Dictionary<string, string> _jobErrors = [];
+    private readonly HashSet<string> _watching = [];
+    private Dictionary<string, Destination> _destinations = [];
+    private IReadOnlyList<Alert> _alerts = [];
+    private LicenceStatus? _licence;
+    private List<Job>? _jobs;
+    private bool _connectionProblem;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Monitor.Changed += OnMonitorChanged;
+        await RefreshAsync();
+        if (Options.DashboardRefresh > TimeSpan.Zero && Options.DashboardRefresh != Timeout.InfiniteTimeSpan)
+        {
+            _ = PollAsync(_cts.Token);
+        }
+    }
+
+    /// <summary>Picks up scheduled runs and changes made elsewhere (the tray icon, another window).</summary>
+    private async Task PollAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(Options.DashboardRefresh);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void OnMonitorChanged() => _ = InvokeAsync(async () =>
+    {
+        if (Monitor.IsReady && (_jobs is null || _connectionProblem))
+        {
+            await RefreshAsync();
+        }
+
+        StateHasChanged();
+    });
+
+    private async Task RefreshAsync()
+    {
+        var ct = _cts.Token;
+        try
+        {
+            var jobs = await Agent.ListJobsAsync(ct);
+            var destinations = await Agent.ListDestinationsAsync(ct);
+            foreach (var job in jobs)
+            {
+                // Runs give the last successful backup and the last check.
+                var runs = await Agent.ListRunsAsync(job.Id, Options.DashboardRunLimit, ct);
+                _runs[job.Id] = runs;
+
+                if (job.LastRun is { State: RunState.Running } running && !_watching.Contains(running.Id))
+                {
+                    _progress.TryAdd(job.Id, new RunProgress { RunId = running.Id, State = RunState.Running });
+                    Follow(job.Id, running.Id, isCheck: false);
+                }
+
+                if (runs.FirstOrDefault(r => r.Kind == RunKind.Verify && r.State == RunState.Running) is { } check && !_watching.Contains(check.Id))
+                {
+                    _checking[job.Id] = check.Id;
+                    Follow(job.Id, check.Id, isCheck: true);
+                }
+            }
+
+            _alerts = await Agent.ListAlertsAsync(ct);
+            _licence = await Agent.GetLicenceAsync(ct);
+            _jobs = [.. jobs];
+            _destinations = destinations.ToDictionary(d => d.Id);
+            _connectionProblem = false;
+            _error = null;
+        }
+        catch (AgentCallException ex) when (ex.IsConnectionProblem)
+        {
+            // The banner explains it (tell the monitor now rather than at its next poll); keep showing what we had.
+            _connectionProblem = true;
+            _ = Monitor.RefreshAsync(ct);
+        }
+        catch (AgentCallException ex)
+        {
+            _error = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task BackupNowAsync(Job job)
+    {
+        _jobErrors.Remove(job.Id);
+        try
+        {
+            var run = await Agent.RunJobNowAsync(job.Id, _cts.Token);
+            if (run.State == RunState.Running)
+            {
+                _progress[job.Id] = new RunProgress { RunId = run.Id, State = RunState.Running };
+                Follow(job.Id, run.Id, isCheck: false);
+            }
+            else
+            {
+                // It ended at once (for example the destination drive is unplugged): show that run.
+                await RefreshAsync();
+            }
+        }
+        catch (AgentCallException ex)
+        {
+            _jobErrors[job.Id] = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task VerifyNowAsync(Job job)
+    {
+        _jobErrors.Remove(job.Id);
+        try
+        {
+            var run = await Agent.VerifyJobNowAsync(job.Id, _cts.Token);
+            _checking[job.Id] = run.Id;
+            Follow(job.Id, run.Id, isCheck: true);
+        }
+        catch (AgentCallException ex)
+        {
+            _jobErrors[job.Id] = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task CancelAsync(Job job)
+    {
+        if (_progress.GetValueOrDefault(job.Id) is not { } progress)
+        {
+            return;
+        }
+
+        try
+        {
+            await Agent.CancelRunAsync(progress.RunId, _cts.Token);
+        }
+        catch (AgentCallException ex)
+        {
+            _jobErrors[job.Id] = ErrorText.For(ex);
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void Follow(string jobId, string runId, bool isCheck)
+    {
+        _watching.Add(runId);
+        _ = FollowAsync(jobId, runId, isCheck, _cts.Token);
+    }
+
+    /// <summary>Follows a backup (with progress) or a check (no progress) to its end, then reloads.</summary>
+    private async Task FollowAsync(string jobId, string runId, bool isCheck, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var update in Agent.WatchRunAsync(runId, ct))
+            {
+                if (update.Finished is null && !isCheck)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        _progress[jobId] = update;
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (AgentCallException ex) when (!ex.IsConnectionProblem)
+        {
+            _jobErrors[jobId] = ErrorText.For(ex);
+        }
+        catch (AgentCallException)
+        {
+            // The agent went away mid-run; the banner says so and the next refresh shows how the run ended.
+        }
+
+        await InvokeAsync(async () =>
+        {
+            _watching.Remove(runId);
+            if (isCheck)
+            {
+                _checking.Remove(jobId);
+            }
+            else
+            {
+                _progress.Remove(jobId);
+            }
+
+            await RefreshAsync();
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Monitor.Changed -= OnMonitorChanged;
+        await _cts.CancelAsync();
+        _cts.Dispose();
+    }
+}

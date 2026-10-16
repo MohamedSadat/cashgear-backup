@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package cashgear.backup.desktop.v1;
+
+option csharp_namespace = "CashGear.Backup.Client.Elevation.V1";
+
+// Between the desktop app and its elevated helper, over a private named pipe the app creates. The helper
+// forwards each call to the agent on its own (elevated) connection and sends back the result.
+// Calls carry repository passwords: never log these messages.
+
+message ElevatedCall {
+  // The agent method: one of the Manage calls in backup_agent.proto, for example "CreateDestination".
+  string method = 1;
+  // The serialized request message of that method.
+  bytes request = 2;
+}
+
+message ElevatedReply {
+  // The serialized response message when status_code is 0 (OK).
+  bytes response = 1;
+  // A gRPC status code; 0 is OK.
+  int32 status_code = 2;
+  // The agent's "cashgear-error-kind" trailer, or a kind the helper adds itself.
+  string error_kind = 3;
+  string message = 4;
+}

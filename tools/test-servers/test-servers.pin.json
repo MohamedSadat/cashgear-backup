@@ -1,0 +1,25 @@
+{
+  "comment": "Test-only servers for the SFTP and S3 destination tests; never shipped. Fetched by fetch-test-servers.ps1 into tools/test-servers/<name>/ (gitignored). Both are AGPL/Apache tools run locally on 127.0.0.1 only.",
+  "servers": [
+    {
+      "name": "sftpgo",
+      "version": "2.7.6",
+      "license": "AGPL-3.0",
+      "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_windows_portable.zip",
+      "zipSha256": "af3994bb690962c7575858aee368a4c1d6fd4748b35770bb0773eb06408d504d",
+      "exe": "sftpgo.exe",
+      "exeSha256": "7773a4a03a15b72b6433fa28c3889d957ae6115adc2da769a2de6dbd57163ed6",
+      "zipSha256Source": "Computed at pin time (2026-10-15); the release publishes no checksum file."
+    },
+    {
+      "name": "versitygw",
+      "version": "1.8.0",
+      "license": "Apache-2.0",
+      "url": "https://github.com/versity/versitygw/releases/download/v1.8.0/versitygw_v1.8.0_Windows_x86_64.zip",
+      "zipSha256": "18b1023359b62a7c4dfed790c194e2253dda944083fb601ce77343e818165f8d",
+      "exe": "versitygw_v1.8.0_Windows_x86_64/versitygw.exe",
+      "exeSha256": "01cdbea3e961f4a50b18d7721bde6c1c3954946563b87673192801ad4ef07773",
+      "zipSha256Source": "Matches the release's checksums.txt."
+    }
+  ]
+}
