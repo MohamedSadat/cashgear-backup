@@ -110,7 +110,7 @@ public sealed class ScaleTests
                 : SourceData.HashFile(restored) == source.BigFileSha256 ? [] : [$"content differs: {ScaleSource.BigFileName}"];
         }
 
-        return TreeManifest.Capture(source.Folder).ContentDifferences(TreeManifest.Capture(target));
+        return ParallelTreeCompare.Differences(source.Folder, target);
     }
 
     /// <summary>Fails early, with what is needed, rather than filling the disk part way through.</summary>

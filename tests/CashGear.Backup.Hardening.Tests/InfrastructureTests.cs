@@ -106,6 +106,27 @@ public sealed class InfrastructureTests
     }
 
     [Fact]
+    public void The_parallel_compare_reports_missing_changed_and_extra_items()
+    {
+        using var ws = Workspace.Create(nameof(The_parallel_compare_reports_missing_changed_and_extra_items));
+        var expected = Path.Combine(ws.Root, "expected");
+        var actual = Path.Combine(ws.Root, "actual");
+        foreach (var root in new[] { expected, actual })
+        {
+            Directory.CreateDirectory(Path.Combine(root, "same", "empty"));
+            File.WriteAllText(Path.Combine(root, "same", "a.txt"), "a");
+            File.WriteAllText(Path.Combine(root, "changed.txt"), root == expected ? "before" : "after!");
+        }
+
+        File.WriteAllText(Path.Combine(expected, "missing.txt"), "m");
+        File.WriteAllText(Path.Combine(actual, "extra.txt"), "x");
+
+        Assert.Empty(Scale.ParallelTreeCompare.Differences(expected, expected));
+        Assert.Equal(["content differs: changed.txt (6 vs 6 bytes)", "missing: missing.txt", "extra: extra.txt"],
+            Scale.ParallelTreeCompare.Differences(expected, actual));
+    }
+
+    [Fact]
     public void The_defaults_are_the_small_variants()
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariables().Keys.Cast<string>().Any(k => k.StartsWith("CASHGEAR_SCALE_", StringComparison.Ordinal)
