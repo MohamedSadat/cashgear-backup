@@ -159,6 +159,21 @@ internal sealed record TaskListResponse : KopiaResponse
     public List<TaskInfo> Tasks { get; init; } = [];
 }
 
+/// <summary>
+/// One line of a task's log. <see cref="Ts"/> is Unix time in seconds; <see cref="Level"/> is 0 debug, 1 info,
+/// 2 warning, 3 error. Entries may carry more fields (for example <c>source</c>), kept in Extra.
+/// </summary>
+internal sealed record TaskLogEntry(int Level, double Ts, string? Mod, string? Msg)
+{
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; init; }
+}
+
+internal sealed record TaskLogResponse : KopiaResponse
+{
+    public List<TaskLogEntry> Logs { get; init; } = [];
+}
+
 /// <summary>A directory object from <c>GET /api/v1/objects/{id}</c>.</summary>
 internal sealed record DirectoryManifest : KopiaResponse
 {

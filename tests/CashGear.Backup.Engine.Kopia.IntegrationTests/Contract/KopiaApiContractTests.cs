@@ -227,6 +227,27 @@ public class KopiaApiContractTests(ContractServerFixture fx) : IClassFixture<Con
     }
 
     [Fact]
+    public async Task Task_logs_are_timed_leveled_lines_oldest_first()
+    {
+        // The engine reads a backup's log for storage errors (Runs/DestinationWatch).
+        var (status, body) = await Client.SendRawAsync(KopiaUser.Ui, HttpMethod.Get, "/api/v1/tasks/" + fx.SnapshotTask.Id + "/logs", null, includeCsrf: true, Ct);
+        Assert.Equal(200, status);
+        var json = JsonShape.Parse(body);
+        JsonShape.Has(json, ("logs", J.Array));
+        var lines = json.GetProperty("logs").EnumerateArray().ToList();
+        Assert.NotEmpty(lines);
+        foreach (var line in lines)
+        {
+            JsonShape.Has(line, ("level", J.Number), ("ts", J.Number), ("mod", J.String), ("msg", J.String));
+        }
+
+        var logs = await Client.GetTaskLogsAsync(fx.SnapshotTask.Id, Ct);
+        Assert.Equal(lines.Count, logs.Logs.Count);
+        Assert.Equal(logs.Logs.OrderBy(l => l.Ts).Select(l => l.Ts), logs.Logs.Select(l => l.Ts));
+        Assert.Contains(logs.Logs, l => l.Msg?.StartsWith("created snapshot ", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public async Task Objects_returns_the_directory_manifest_of_a_snapshot_root()
     {
         var (status, body) = await Client.SendRawAsync(KopiaUser.Ui, HttpMethod.Get, "/api/v1/objects/" + fx.Snapshot.RootId, null, includeCsrf: true, Ct);

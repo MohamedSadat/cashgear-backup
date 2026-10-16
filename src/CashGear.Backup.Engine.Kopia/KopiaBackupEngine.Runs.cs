@@ -29,9 +29,11 @@ public sealed partial class KopiaBackupEngine
         var source = session.Source(sourcePath);
         var key = $"{session.Destination.RepositoryId:N}|{sourcePath}";
         var runId = Guid.NewGuid();
-        if (!_activeSources.TryAdd(key, runId))
+        if (!await TryReserveSourceAsync(key, runId, ct))
         {
-            throw new BackupEngineException(BackupErrorKind.RunAlreadyActive, $"A backup of {sourcePath} is already running.");
+            throw new BackupEngineException(BackupErrorKind.RunAlreadyActive, StoppingRun(key) is not null
+                ? $"The last backup of {sourcePath} lost its destination and Kopia is still stopping it; try again once the destination is back."
+                : $"A backup of {sourcePath} is already running.");
         }
 
         try
@@ -183,6 +185,36 @@ public sealed partial class KopiaBackupEngine
             ? client.CancelUploadAsync(tracker.Source!, ct)
             : tracker.TaskId is { } id ? client.CancelTaskAsync(id, ct) : Task.CompletedTask;
 
+    /// <summary>
+    /// Reserves the source for a new run. A run the engine ended itself because its destination was lost keeps the
+    /// source until Kopia's upload has stopped as well (<see cref="DrainAsync"/>): wait for that a while before refusing.
+    /// </summary>
+    private async Task<bool> TryReserveSourceAsync(string key, Guid runId, CancellationToken ct)
+    {
+        if (_activeSources.TryAdd(key, runId))
+        {
+            return true;
+        }
+
+        if (StoppingRun(key) is { } stopping)
+        {
+            try
+            {
+                await stopping.Monitor.WaitAsync(_options.StoppingRunWait, ct);
+            }
+            catch (TimeoutException)
+            {
+                // Still stopping; refused below.
+            }
+        }
+
+        return _activeSources.TryAdd(key, runId);
+    }
+
+    /// <summary>The run that holds the source although it has its result: Kopia is still stopping its upload.</summary>
+    private RunTracker? StoppingRun(string key) =>
+        _activeSources.TryGetValue(key, out var holder) && _runs.TryGetValue(holder, out var tracker) && tracker.IsFinished ? tracker : null;
+
     private async Task MonitorBackupAsync(RunTracker tracker, RepositorySession session, int generation,
         HashSet<string> knownSnapshots, HashSet<string> knownTasks, string sourceKey)
     {
@@ -191,12 +223,15 @@ public sealed partial class KopiaBackupEngine
         var taskPrefix = source + " at ";
         var discovery = Stopwatch.StartNew();
         var lastCancel = Stopwatch.StartNew();
+        var lastLogRead = Stopwatch.StartNew();
+        var destination = new DestinationWatch(_options.DestinationLossWindow, _options.DestinationQuietPeriod);
         TaskInfo? task = null;
+        DestinationLoss? lost = null;
         string? failure = null;
         var errors = 0;
         try
         {
-            while (task is not { IsFinished: true } && failure is null)
+            while (task is not { IsFinished: true } && failure is null && lost is null)
             {
                 await Task.Delay(_options.PollInterval, stop);
                 try
@@ -247,7 +282,14 @@ public sealed partial class KopiaBackupEngine
                         EstimatedBytes = upload?.EstimatedBytes > 0 ? upload.EstimatedBytes : p.EstimatedBytes,
                     });
 
-                    if (tracker.CancelRequested && !task.IsFinished && lastCancel.Elapsed >= s_cancelResendInterval)
+                    // Kopia never fails a snapshot for a lost destination; its task log shows the writes failing.
+                    if (!task.IsFinished && lastLogRead.Elapsed >= _options.TaskLogInterval)
+                    {
+                        lastLogRead.Restart();
+                        lost = destination.Observe((await client.GetTaskLogsAsync(tracker.TaskId, stop)).Logs);
+                    }
+
+                    if ((tracker.CancelRequested || lost is not null) && !task.IsFinished && lastCancel.Elapsed >= s_cancelResendInterval)
                     {
                         await SendCancelAsync(tracker, client, stop);
                         lastCancel.Restart();
@@ -270,7 +312,12 @@ public sealed partial class KopiaBackupEngine
             }
 
             RunResult result;
-            if (failure is not null)
+            if (lost is not null)
+            {
+                LogDestinationLost(_logger, tracker.Handle.Id, tracker.Handle.JobId, lost.Problem, (int)lost.FailingFor.TotalSeconds, Shorten(lost.LastError));
+                result = Lost(tracker, lost);
+            }
+            else if (failure is not null)
             {
                 result = Failed(tracker, failure);
             }
@@ -283,6 +330,10 @@ public sealed partial class KopiaBackupEngine
 
             tracker.Finish(result);
             LogBackupFinished(_logger, tracker.Handle.Id, tracker.Handle.JobId, result.State, result.SnapshotId, result.Files, result.FailedItemCount, result.Message);
+            if (lost is not null)
+            {
+                await DrainAsync(tracker, session, generation, stop);
+            }
         }
         catch (Exception ex) when (ex is OperationCanceledException && stop.IsCancellationRequested)
         {
@@ -302,6 +353,44 @@ public sealed partial class KopiaBackupEngine
             _activeSources.TryRemove(KeyValuePair.Create(sourceKey, tracker.Handle.Id));
             TrimFinishedRuns();
         }
+    }
+
+    /// <summary>
+    /// After the engine ended a backup that lost its destination, Kopia's upload goes on until the cancel takes hold
+    /// (minutes while the destination stays away: in-flight writes run out their retries first). Until then the source
+    /// stays reserved, so a new run of the folder never starts on top of it. Ends when Kopia's task ends, when the
+    /// server is replaced (the task is gone with it) or when the engine stops. The run already has its result.
+    /// </summary>
+    private async Task DrainAsync(RunTracker tracker, RepositorySession session, int generation, CancellationToken stop)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (session.Host.IsCurrent(generation))
+        {
+            try
+            {
+                var server = await session.Host.GetSessionAsync(stop);
+                if (server.Generation != generation)
+                {
+                    break;
+                }
+
+                if ((await server.Client.GetTaskAsync(tracker.TaskId!, stop)).IsFinished)
+                {
+                    LogUploadStopped(_logger, tracker.Handle.Id, stopwatch.Elapsed.TotalSeconds, "Kopia's task ended");
+                    return;
+                }
+
+                await SendCancelAsync(tracker, server.Client, stop);
+            }
+            catch (Exception ex) when (!stop.IsCancellationRequested && (IsKopiaFailure(ex) || !session.Host.IsCurrent(generation)))
+            {
+                // Kopia busy, or the server being replaced: the loop condition decides.
+            }
+
+            await Task.Delay(s_cancelResendInterval, stop);
+        }
+
+        LogUploadStopped(_logger, tracker.Handle.Id, stopwatch.Elapsed.TotalSeconds, "its server was replaced");
     }
 
     private async Task MonitorRestoreAsync(RunTracker tracker, RepositorySession session, int generation, string target)
@@ -434,6 +523,13 @@ public sealed partial class KopiaBackupEngine
         Message = message,
     };
 
+    /// <summary>
+    /// A backup the engine ended because its destination was lost. Never a restore point (rule 5), whatever Kopia does
+    /// with the upload afterwards; Canceled rather than Failed when the user had already asked to cancel it.
+    /// </summary>
+    private static RunResult Lost(RunTracker tracker, DestinationLoss loss) =>
+        Failed(tracker, loss.Message) with { State = tracker.CancelRequested ? RunState.Canceled : RunState.Failed };
+
     /// <summary>The message of a run lost because its kopia server died or is being replaced (finding 2); logs it once.</summary>
     private string EngineStopped(RepositorySession session, RunTracker tracker)
     {
@@ -444,6 +540,8 @@ public sealed partial class KopiaBackupEngine
             : $"The backup engine stopped during the restore ({reason}); the restore did not finish and the target folder may hold a partial copy. The engine restarts by itself.";
     }
 
+    /// <summary>Kopia's storage errors can run to kilobytes (they repeat their causes); the log gets the start.</summary>
+    private static string Shorten(string text) => text.Length <= 500 ? text : text[..500] + "...";
 
     private static async Task<DirectoryEntry> FindEntryAsync(KopiaApiClient client, string rootId, IReadOnlyList<string> segments, string path, CancellationToken ct)
     {
@@ -500,6 +598,13 @@ public sealed partial class KopiaBackupEngine
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Following run {RunId} failed")]
     private static partial void LogMonitorFailed(ILogger logger, Exception exception, Guid runId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Backup {RunId} of job {JobId} lost its destination ({Problem}: Kopia's writes kept failing for {Seconds} s); "
+        + "the run ends now and Kopia's upload is canceled. Kopia's last storage error: {LastError}")]
+    private static partial void LogDestinationLost(ILogger logger, Guid runId, Guid? jobId, DestinationProblem problem, int seconds, string lastError);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Kopia's upload for backup {RunId} is over ({How}), {Seconds:0} s after the engine ended the run; its folder can be backed up again")]
+    private static partial void LogUploadStopped(ILogger logger, Guid runId, double seconds, string how);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Run {RunId} was lost: the backup engine stopped during it ({Reason})")]
     private static partial void LogRunLostToRestart(ILogger logger, Guid runId, string reason);

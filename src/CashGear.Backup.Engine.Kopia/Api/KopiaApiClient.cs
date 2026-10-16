@@ -166,6 +166,10 @@ internal sealed partial class KopiaApiClient : IDisposable
     public Task<TaskInfo> GetTaskAsync(string id, CancellationToken ct) =>
         SendAsync<TaskInfo>(KopiaUser.Ui, HttpMethod.Get, "/api/v1/tasks/" + Uri.EscapeDataString(id), null, ct);
 
+    /// <summary>The task's whole log so far, oldest first. A backup logs every write Kopia retries or gives up on.</summary>
+    public Task<TaskLogResponse> GetTaskLogsAsync(string id, CancellationToken ct) =>
+        SendAsync<TaskLogResponse>(KopiaUser.Ui, HttpMethod.Get, "/api/v1/tasks/" + Uri.EscapeDataString(id) + "/logs", null, ct);
+
     public Task CancelTaskAsync(string id, CancellationToken ct) =>
         SendAsync<JsonElement>(KopiaUser.Ui, HttpMethod.Post, "/api/v1/tasks/" + Uri.EscapeDataString(id) + "/cancel", new { }, ct);
 
