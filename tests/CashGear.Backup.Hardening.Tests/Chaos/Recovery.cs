@@ -2,10 +2,11 @@ using System.Diagnostics;
 using CashGear.Backup.Contracts.V1;
 using CashGear.Backup.Hardening.Tests.Infrastructure;
 using CashGear.Backup.Testing;
+using Grpc.Core;
 
 namespace CashGear.Backup.Hardening.Tests.Chaos;
 
-/// <summary>A restore point taken before the fault, which must still restore byte for byte after it.</summary>
+/// <summary>A snapshot and the manifest of the source it was taken from: it must restore byte for byte.</summary>
 internal sealed record RestorePoint(string SnapshotId, TreeManifest Manifest);
 
 /// <summary>
@@ -59,7 +60,7 @@ internal static class Recovery
                 Log($"the run ended by itself {sinceFault.Elapsed.TotalSeconds:N0} s after the fault: {ended.State}");
                 return ended;
             }
-            catch (Exception ex) when (ex is OperationCanceledException or Grpc.Core.RpcException { StatusCode: Grpc.Core.StatusCode.Cancelled } && !Ct.IsCancellationRequested)
+            catch (Exception ex) when (ex is OperationCanceledException or RpcException { StatusCode: StatusCode.Cancelled } && !Ct.IsCancellationRequested)
             {
             }
         }

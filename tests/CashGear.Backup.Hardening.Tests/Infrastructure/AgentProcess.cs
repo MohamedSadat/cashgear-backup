@@ -276,12 +276,12 @@ internal sealed class AgentProcess : IAsyncDisposable
     public async Task<IReadOnlyList<Snapshot>> ListSnapshotsAsync(string jobId, CancellationToken ct) =>
         (await Client.ListSnapshotsAsync(new ListSnapshotsRequest { JobId = jobId }, cancellationToken: ct)).Snapshots;
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _channel?.Dispose();
         _channel = null;
         ReleaseProcess();
-        await Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>Closes the job (terminating whatever is left in it) and forgets the process.</summary>
